@@ -781,8 +781,13 @@ end)
 -- START
 --==================================================
 
+-- START
 Lighting.Brightness = 2
+
+task.wait(1)
+
 showHome()
+
 
 -- Clock update
 
