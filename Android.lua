@@ -1,9 +1,9 @@
 
---====================================================
--- ANDROID 16 VIRTUAL OS v4
+--========================================================
+-- ANDROID 16 VIRTUAL OS v5
 -- Roblox Studio | Mobile / Tablet / PC
--- LocalScript
---====================================================
+-- StarterPlayerScripts > LocalScript
+--========================================================
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -17,29 +17,24 @@ local playerGui = player:WaitForChild("PlayerGui")
 local old = playerGui:FindFirstChild("Android16")
 if old then old:Destroy() end
 
--- GUI
-local gui = Instance.new("ScreenGui")
-gui.Name = "Android16"
-gui.IgnoreGuiInset = true
-gui.ResetOnSpawn = false
-gui.DisplayOrder = 100
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = playerGui
-
---====================================================
+--========================================================
 -- STATE
---====================================================
+--========================================================
 
 local state = {
     page = "Lock",
     dark = false,
+
     wifi = true,
     bluetooth = false,
     airplane = false,
     sound = true,
+
     brightness = 1,
     wallpaper = 1,
-    quick = false
+
+    quick = false,
+    navigationMode = "Gesture"
 }
 
 local wallpapers = {
@@ -61,9 +56,17 @@ local function fg()
         or Color3.fromRGB(30,30,40)
 end
 
---====================================================
--- UI LAYERS
---====================================================
+--========================================================
+-- GUI
+--========================================================
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "Android16"
+gui.IgnoreGuiInset = true
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 100
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = playerGui
 
 local root = Instance.new("Frame")
 root.Size = UDim2.fromScale(1,1)
@@ -71,7 +74,7 @@ root.BackgroundColor3 = wallpapers[1]
 root.BorderSizePixel = 0
 root.Parent = gui
 
--- Wallpaper
+-- Wallpaper layer
 local wallpaper = Instance.new("Frame")
 wallpaper.Name = "Wallpaper"
 wallpaper.Size = UDim2.fromScale(1,1)
@@ -79,14 +82,14 @@ wallpaper.BackgroundColor3 = wallpapers[1]
 wallpaper.BorderSizePixel = 0
 wallpaper.Parent = root
 
--- Page layer
+-- Application layer
 local pages = Instance.new("Frame")
 pages.Name = "Pages"
 pages.Size = UDim2.fromScale(1,1)
 pages.BackgroundTransparency = 1
 pages.Parent = root
 
--- System layer
+-- Persistent system layer
 local system = Instance.new("Frame")
 system.Name = "SystemUI"
 system.Size = UDim2.fromScale(1,1)
@@ -94,9 +97,9 @@ system.BackgroundTransparency = 1
 system.ZIndex = 50
 system.Parent = root
 
---====================================================
+--========================================================
 -- HELPERS
---====================================================
+--========================================================
 
 local function make(class,props,parent)
     local obj = Instance.new(class)
@@ -225,9 +228,9 @@ local function settingRow(parent,title,callback)
     return b
 end
 
---====================================================
--- FORWARD FUNCTIONS
---====================================================
+--========================================================
+-- FORWARD DECLARATIONS
+--========================================================
 
 local showHome
 local showLock
@@ -242,36 +245,74 @@ local showBattery
 local showStorage
 local showDeviceInfo
 local showInfo
+local showNavigation
+local showRecent
 
---====================================================
--- NAVIGATION
---====================================================
+local toggleQuick
+
+--========================================================
+-- NAVIGATION BAR
+--========================================================
 
 local function navigation()
     local bar = make("Frame",{
+        Name = "NavigationBar",
         Size = UDim2.new(1,0,0,45),
         Position = UDim2.new(0,0,1,-45),
-        BackgroundTransparency = 1
+        BackgroundTransparency = 1,
+        ZIndex = 10
     },pages)
 
-    local home = make("TextButton",{
-        Size = UDim2.fromOffset(110,5),
-        Position = UDim2.new(0.5,-55,0,20),
-        BackgroundColor3 = fg(),
-        BackgroundTransparency = 0.2,
-        Text = ""
-    },bar)
+    if state.navigationMode == "Gesture" then
 
-    round(home,10)
+        -- GESTURE BAR
 
-    home.Activated:Connect(function()
-        showHome()
-    end)
+        local gestureBar = make("Frame",{
+            Size = UDim2.fromOffset(110,5),
+            Position = UDim2.new(0.5,-55,1,-15),
+            BackgroundColor3 = Color3.fromRGB(130,130,140),
+            BorderSizePixel = 0
+        },bar)
+
+        round(gestureBar,10)
+
+    else
+
+        -- THREE BUTTON NAVIGATION
+
+        local back = button(
+            bar,
+            "‹",
+            UDim2.fromOffset(50,40),
+            UDim2.new(0.15,0,0,0),
+            function()
+                if state.page ~= "Home" then
+                    showHome()
+                end
+            end
+        )
+
+        local home = button(
+            bar,
+            "○",
+            UDim2.fromOffset(50,40),
+            UDim2.new(0.5,-25,0,0),
+            showHome
+        )
+
+        local recent = button(
+            bar,
+            "Ⅱ",
+            UDim2.fromOffset(50,40),
+            UDim2.new(0.75,-25,0,0),
+            showRecent
+        )
+    end
 end
 
---====================================================
+--========================================================
 -- HOME
---====================================================
+--========================================================
 
 showHome = function()
     clearPage()
@@ -304,8 +345,6 @@ showHome = function()
     )
 
     date.TextColor3 = Color3.new(1,1,1)
-
-    -- APP ICONS
 
     local apps = make("Frame",{
         Size = UDim2.new(1,-30,0,110),
@@ -354,9 +393,9 @@ showHome = function()
     navigation()
 end
 
---====================================================
+--========================================================
 -- APP DRAWER
---====================================================
+--========================================================
 
 showDrawer = function()
     local page = pageBase("앱")
@@ -440,9 +479,35 @@ showDrawer = function()
     navigation()
 end
 
---====================================================
+--========================================================
+-- RECENT APPS
+--========================================================
+
+showRecent = function()
+    local page = pageBase("최근 앱")
+
+    local apps = {
+        {"설정",showSettings},
+        {"앱 목록",showDrawer},
+        {"배경화면",showWallpaper}
+    }
+
+    for i,app in ipairs(apps) do
+        local b = button(
+            page,
+            app[1].." 열기",
+            UDim2.new(1,-40,0,65),
+            UDim2.new(0,20,0,120+(i-1)*80),
+            app[2]
+        )
+    end
+
+    navigation()
+end
+
+--========================================================
 -- SETTINGS
---====================================================
+--========================================================
 
 showSettings = function()
     local page = pageBase("설정")
@@ -453,6 +518,7 @@ showSettings = function()
     settingRow(scroll,"디스플레이",showDisplay)
     settingRow(scroll,"소리 및 진동",showSound)
     settingRow(scroll,"배경화면",showWallpaper)
+    settingRow(scroll,"시스템 내비게이션",showNavigation)
     settingRow(scroll,"배터리",showBattery)
     settingRow(scroll,"저장공간",showStorage)
     settingRow(scroll,"기기 정보",showDeviceInfo)
@@ -460,9 +526,9 @@ showSettings = function()
     navigation()
 end
 
---====================================================
+--========================================================
 -- NETWORK
---====================================================
+--========================================================
 
 showNetwork = function()
     local page = pageBase("네트워크 및 인터넷")
@@ -488,15 +554,15 @@ showNetwork = function()
     )
 
     settingRow(scroll,"인터넷 정보",function()
-        showInfo("네트워크","Roblox 내부의 가상 네트워크 설정입니다.")
+        showInfo("네트워크","Roblox 내부 가상 네트워크 설정입니다.")
     end)
 
     navigation()
 end
 
---====================================================
+--========================================================
 -- BLUETOOTH
---====================================================
+--========================================================
 
 showBluetooth = function()
     local page = pageBase("연결된 기기")
@@ -517,9 +583,9 @@ showBluetooth = function()
     navigation()
 end
 
---====================================================
+--========================================================
 -- DISPLAY
---====================================================
+--========================================================
 
 showDisplay = function()
     local page = pageBase("디스플레이")
@@ -580,9 +646,9 @@ showDisplay = function()
     navigation()
 end
 
---====================================================
+--========================================================
 -- SOUND
---====================================================
+--========================================================
 
 showSound = function()
     local page = pageBase("소리 및 진동")
@@ -603,9 +669,9 @@ showSound = function()
     navigation()
 end
 
---====================================================
+--========================================================
 -- WALLPAPER
---====================================================
+--========================================================
 
 showWallpaper = function()
     local page = pageBase("배경화면")
@@ -637,9 +703,9 @@ showWallpaper = function()
     navigation()
 end
 
---====================================================
+--========================================================
 -- BATTERY
---====================================================
+--========================================================
 
 showBattery = function()
     local page = pageBase("배터리")
@@ -658,9 +724,9 @@ showBattery = function()
     navigation()
 end
 
---====================================================
+--========================================================
 -- STORAGE
---====================================================
+--========================================================
 
 showStorage = function()
     local page = pageBase("저장공간")
@@ -679,9 +745,9 @@ showStorage = function()
     navigation()
 end
 
---====================================================
+--========================================================
 -- DEVICE INFO
---====================================================
+--========================================================
 
 showDeviceInfo = function()
     local page = pageBase("기기 정보")
@@ -700,9 +766,56 @@ showDeviceInfo = function()
     navigation()
 end
 
---====================================================
+--========================================================
+-- NAVIGATION SETTINGS
+--========================================================
+
+showNavigation = function()
+    local page = pageBase("시스템 내비게이션")
+
+    local info = label(
+        page,
+        "원하는 내비게이션 방식을 선택하세요.",
+        UDim2.new(1,-40,0,50),
+        UDim2.fromOffset(20,115)
+    )
+
+    info.TextXAlignment = Enum.TextXAlignment.Left
+
+    local gesture = button(
+        page,
+        "제스처 내비게이션",
+        UDim2.new(1,-30,0,65),
+        UDim2.fromOffset(15,180),
+        function()
+            state.navigationMode = "Gesture"
+            showNavigation()
+        end
+    )
+
+    local buttons = button(
+        page,
+        "3버튼 내비게이션",
+        UDim2.new(1,-30,0,65),
+        UDim2.fromOffset(15,260),
+        function()
+            state.navigationMode = "Buttons"
+            showNavigation()
+        end
+    )
+
+    if state.navigationMode == "Gesture" then
+        gesture.Text = "✓ 제스처 내비게이션"
+    else
+        buttons.Text = "✓ 3버튼 내비게이션"
+    end
+
+    navigation()
+end
+
+--========================================================
 -- INFO
---====================================================
+--========================================================
 
 showInfo = function(title,message)
     local page = pageBase(title)
@@ -715,9 +828,9 @@ showInfo = function(title,message)
     navigation()
 end
 
---====================================================
+--========================================================
 -- LOCK SCREEN
---====================================================
+--========================================================
 
 showLock = function()
     clearPage()
@@ -753,16 +866,16 @@ showLock = function()
 
     button(
         page,
-        "위로 밀어 잠금 해제",
+        "잠금 해제",
         UDim2.new(0.8,0,0,60),
         UDim2.new(0.1,0,0.82,0),
         showHome
     )
 end
 
---====================================================
--- QUICK SETTINGS (PERSISTENT LAYER)
---====================================================
+--========================================================
+-- QUICK SETTINGS
+--========================================================
 
 local quick = make("Frame",{
     Name = "QuickPanel",
@@ -819,13 +932,17 @@ end)
 
 qbutton("설정",0.03,215,function()
     state.quick = false
+
     tween(quick,{
         Position = UDim2.new(0,0,0,-310)
     })
+
     showSettings()
 end)
 
--- TOP HANDLE
+--========================================================
+-- QUICK SETTINGS HANDLE
+--========================================================
 
 local handle = make("TextButton",{
     Name = "QuickHandle",
@@ -839,7 +956,7 @@ local handle = make("TextButton",{
 
 round(handle,20)
 
-local function toggleQuick()
+toggleQuick = function()
     state.quick = not state.quick
 
     tween(quick,{
@@ -851,24 +968,30 @@ end
 
 handle.Activated:Connect(toggleQuick)
 
---====================================================
+--========================================================
 -- TOUCH GESTURES
---====================================================
+--========================================================
 
-local touchStart
+local touchStart = nil
+local touchStartTime = 0
 
 UIS.InputBegan:Connect(function(input,processed)
+
     if input.UserInputType == Enum.UserInputType.Touch then
         touchStart = input.Position
+        touchStartTime = os.clock()
     end
 
     if processed then return end
 
     if input.KeyCode == Enum.KeyCode.Escape then
+
         if state.quick then
             toggleQuick()
+
         elseif state.page ~= "Home" then
             showHome()
+
         else
             showDrawer()
         end
@@ -876,33 +999,76 @@ UIS.InputBegan:Connect(function(input,processed)
 end)
 
 UIS.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-        and touchStart then
 
-        local delta = input.Position.Y-touchStart.Y
+    if input.UserInputType ~= Enum.UserInputType.Touch
+        or not touchStart then
+        return
+    end
 
-        if delta > 70 then
-            if not state.quick then
-                state.quick = true
-                tween(quick,{
-                    Position = UDim2.new(0,0,0,10)
-                })
-            end
+    local startPos = touchStart
+    local endPos = input.Position
 
-        elseif delta < -70 and state.quick then
-            state.quick = false
+    local deltaY = endPos.Y - startPos.Y
+    local deltaX = math.abs(endPos.X-startPos.X)
+
+    local camera = workspace.CurrentCamera
+
+    if not camera then
+        touchStart = nil
+        return
+    end
+
+    local screenHeight = camera.ViewportSize.Y
+    local duration = os.clock()-touchStartTime
+
+    -- Ignore mostly horizontal gestures
+    if deltaX > math.abs(deltaY)*0.8 then
+        touchStart = nil
+        return
+    end
+
+    -- QUICK SETTINGS: TOP TO BOTTOM
+
+    if startPos.Y < 100 and deltaY > 70 then
+
+        if not state.quick then
+            state.quick = true
+
             tween(quick,{
-                Position = UDim2.new(0,0,0,-310)
+                Position = UDim2.new(0,0,0,10)
             })
         end
 
-        touchStart = nil
+    -- CLOSE QUICK SETTINGS
+
+    elseif state.quick and deltaY < -70 then
+
+        state.quick = false
+
+        tween(quick,{
+            Position = UDim2.new(0,0,0,-310)
+        })
+
+    -- GESTURE NAVIGATION
+
+    elseif state.navigationMode == "Gesture"
+        and startPos.Y > screenHeight-100
+        and deltaY < -70
+        and state.page ~= "Lock" then
+
+        if duration > 0.8 then
+            showRecent()
+        else
+            showHome()
+        end
     end
+
+    touchStart = nil
 end)
 
---====================================================
+--========================================================
 -- START
---====================================================
+--========================================================
 
 Lighting.Brightness = 2
 
@@ -926,4 +1092,4 @@ task.spawn(function()
     end
 end)
 
-print("Android 16 Virtual OS v4 Loaded")
+print("Android 16 Virtual OS v5 Loaded")
