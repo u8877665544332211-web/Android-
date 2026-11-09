@@ -1,65 +1,52 @@
 
---========================================================
--- ANDROID 16 VIRTUAL OS v5
--- Roblox Studio | Mobile / Tablet / PC
--- StarterPlayerScripts > LocalScript
---========================================================
+--[[
+    Android 16 Virtual OS
+    Roblox Studio - LocalScript
+    StarterPlayer > StarterPlayerScripts
+
+    가상 OS 시뮬레이션입니다.
+    실제 기기의 전원, Wi-Fi, 블루투스 등을 제어하지 않습니다.
+]]
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local UIS = game:GetService("UserInputService")
-local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- CLEANUP
+-- 기존 GUI 제거
 local old = playerGui:FindFirstChild("Android16")
-if old then old:Destroy() end
+if old then
+    old:Destroy()
+end
 
---========================================================
--- STATE
---========================================================
-
+-- 설정값
 local state = {
-    page = "Lock",
-    dark = false,
-
+    page = "Home",
+    dark = true,
     wifi = true,
     bluetooth = false,
     airplane = false,
     sound = true,
-
     brightness = 1,
-    wallpaper = 1,
-
+    navigationMode = "Gesture",
     quick = false,
-    navigationMode = "Gesture"
+    poweredOff = false,
+    rebooting = false,
 }
 
-local wallpapers = {
-    Color3.fromRGB(90,110,190),
-    Color3.fromRGB(170,100,160),
-    Color3.fromRGB(40,130,140),
-    Color3.fromRGB(30,35,55)
+local COLORS = {
+    background = Color3.fromRGB(15, 17, 24),
+    panel = Color3.fromRGB(30, 33, 43),
+    panel2 = Color3.fromRGB(43, 47, 59),
+    text = Color3.fromRGB(245, 246, 250),
+    subtext = Color3.fromRGB(165, 170, 185),
+    blue = Color3.fromRGB(150, 190, 255),
+    accent = Color3.fromRGB(90, 130, 220),
 }
 
-local function bg()
-    return state.dark
-        and Color3.fromRGB(27,28,35)
-        or Color3.fromRGB(240,239,247)
-end
-
-local function fg()
-    return state.dark
-        and Color3.new(1,1,1)
-        or Color3.fromRGB(30,30,40)
-end
-
---========================================================
--- GUI
---========================================================
-
+-- GUI 생성
 local gui = Instance.new("ScreenGui")
 gui.Name = "Android16"
 gui.IgnoreGuiInset = true
@@ -69,1027 +56,801 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
 
 local root = Instance.new("Frame")
-root.Size = UDim2.fromScale(1,1)
-root.BackgroundColor3 = wallpapers[1]
+root.Name = "Root"
+root.Size = UDim2.fromScale(1, 1)
+root.BackgroundColor3 = COLORS.background
 root.BorderSizePixel = 0
 root.Parent = gui
 
--- Wallpaper layer
-local wallpaper = Instance.new("Frame")
-wallpaper.Name = "Wallpaper"
-wallpaper.Size = UDim2.fromScale(1,1)
-wallpaper.BackgroundColor3 = wallpapers[1]
-wallpaper.BorderSizePixel = 0
-wallpaper.Parent = root
+local scale = Instance.new("UIScale")
+scale.Scale = 0.88
+scale.Parent = root
 
--- Application layer
-local pages = Instance.new("Frame")
-pages.Name = "Pages"
-pages.Size = UDim2.fromScale(1,1)
-pages.BackgroundTransparency = 1
-pages.Parent = root
-
--- Persistent system layer
-local system = Instance.new("Frame")
-system.Name = "SystemUI"
-system.Size = UDim2.fromScale(1,1)
-system.BackgroundTransparency = 1
-system.ZIndex = 50
-system.Parent = root
-
---========================================================
--- HELPERS
---========================================================
-
-local function make(class,props,parent)
-    local obj = Instance.new(class)
-
-    for k,v in pairs(props) do
-        obj[k] = v
+local camera = workspace.CurrentCamera
+local function updateScale()
+    if camera then
+        local size = camera.ViewportSize
+        scale.Scale = math.clamp(math.min(size.X / 430, size.Y / 850), 0.65, 1)
     end
-
-    obj.Parent = parent
-    return obj
 end
 
-local function round(obj,r)
+updateScale()
+if camera then
+    camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+end
+
+-- 공통 UI 함수
+local function corner(obj, radius)
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0,r or 20)
+    c.CornerRadius = UDim.new(0, radius or 16)
     c.Parent = obj
+    return c
 end
 
-local function tween(obj,props,duration)
-    TweenService:Create(
-        obj,
-        TweenInfo.new(
-            duration or 0.25,
-            Enum.EasingStyle.Quint,
-            Enum.EasingDirection.Out
-        ),
-        props
-    ):Play()
-end
-
-local function clearPage()
-    for _,v in ipairs(pages:GetChildren()) do
-        v:Destroy()
+local function makeFrame(parent, name, size, position, color, radius)
+    local f = Instance.new("Frame")
+    f.Name = name
+    f.Size = size
+    f.Position = position
+    f.BackgroundColor3 = color or COLORS.panel
+    f.BorderSizePixel = 0
+    f.Parent = parent
+    if radius then
+        corner(f, radius)
     end
+    return f
 end
 
-local function label(parent,text,size,pos,font)
-    return make("TextLabel",{
-        Size = size,
-        Position = pos,
-        BackgroundTransparency = 1,
-        Text = text,
-        TextColor3 = fg(),
-        TextSize = 17,
-        Font = font or Enum.Font.Gotham,
-        TextWrapped = true
-    },parent)
+local function makeText(parent, text, size, position, textSize, color)
+    local t = Instance.new("TextLabel")
+    t.BackgroundTransparency = 1
+    t.Size = size
+    t.Position = position
+    t.Font = Enum.Font.Gotham
+    t.Text = text
+    t.TextSize = textSize or 16
+    t.TextColor3 = color or COLORS.text
+    t.TextWrapped = true
+    t.Parent = parent
+    return t
 end
 
-local function button(parent,text,size,pos,callback)
-    local b = make("TextButton",{
-        Size = size,
-        Position = pos,
-        BackgroundColor3 = state.dark
-            and Color3.fromRGB(58,60,72)
-            or Color3.fromRGB(220,220,235),
-        Text = text,
-        TextColor3 = fg(),
-        TextSize = 16,
-        Font = Enum.Font.GothamMedium,
-        AutoButtonColor = true
-    },parent)
+local function makeButton(parent, text, size, position, callback, color)
+    local b = Instance.new("TextButton")
+    b.Size = size
+    b.Position = position
+    b.BackgroundColor3 = color or COLORS.panel2
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextColor3 = COLORS.text
+    b.TextSize = 15
+    b.Font = Enum.Font.GothamMedium
+    b.AutoButtonColor = true
+    b.Parent = parent
+    corner(b, 14)
 
-    round(b,18)
-
-    if callback then
-        b.Activated:Connect(callback)
-    end
+    b.Activated:Connect(function()
+        if callback then
+            callback()
+        end
+    end)
 
     return b
 end
 
-local function pageBase(title)
-    clearPage()
-    state.page = title
+local function clear(parent)
+    for _, child in ipairs(parent:GetChildren()) do
+        if not child:IsA("UIListLayout")
+            and not child:IsA("UIGridLayout")
+            and not child:IsA("UIPadding") then
+            child:Destroy()
+        end
+    end
+end
 
-    local page = make("Frame",{
-        Size = UDim2.fromScale(1,1),
-        BackgroundColor3 = bg(),
-        BorderSizePixel = 0
-    },pages)
+-- 배경화면
+local wallpaper = Instance.new("Frame")
+wallpaper.Name = "Wallpaper"
+wallpaper.Size = UDim2.fromScale(1, 1)
+wallpaper.BackgroundColor3 = Color3.fromRGB(25, 35, 75)
+wallpaper.BorderSizePixel = 0
+wallpaper.Parent = root
 
-    local heading = label(
-        page,
-        title,
-        UDim2.new(1,-40,0,60),
-        UDim2.fromOffset(20,45),
-        Enum.Font.GothamBold
-    )
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(40, 65, 130)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(35, 45, 90)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 17, 38)),
+})
+gradient.Rotation = 135
+gradient.Parent = wallpaper
 
-    heading.TextSize = 29
-    heading.TextXAlignment = Enum.TextXAlignment.Left
+-- 페이지 영역
+local pages = Instance.new("Frame")
+pages.Name = "Pages"
+pages.Size = UDim2.fromScale(1, 1)
+pages.BackgroundTransparency = 1
+pages.Parent = root
+
+-- 시스템 UI 영역
+local system = Instance.new("Frame")
+system.Name = "System"
+system.Size = UDim2.fromScale(1, 1)
+system.BackgroundTransparency = 1
+system.Parent = root
+
+-- 전방 선언
+local showHome
+local showLock
+local showSettings
+local showApp
+local showQuick
+local showPowerMenu
+local powerOff
+local restartDevice
+local renderNavigation
+
+-- 현재 페이지 초기화
+local function newPage(name)
+    clear(pages)
+    state.page = name
+
+    local page = Instance.new("Frame")
+    page.Name = name
+    page.Size = UDim2.fromScale(1, 1)
+    page.BackgroundTransparency = 1
+    page.Parent = pages
 
     return page
 end
 
-local function scrollList(parent)
-    local scroll = make("ScrollingFrame",{
-        Size = UDim2.new(1,-30,1,-160),
-        Position = UDim2.fromOffset(15,115),
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        ScrollBarThickness = 3,
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        CanvasSize = UDim2.new()
-    },parent)
+-- 상태 표시줄
+local status = makeFrame(system, "StatusBar",
+    UDim2.new(1, 0, 0, 32),
+    UDim2.new(0, 0, 0, 0),
+    Color3.fromRGB(0, 0, 0), 0)
 
-    make("UIListLayout",{
-        Padding = UDim.new(0,10),
-        SortOrder = Enum.SortOrder.LayoutOrder
-    },scroll)
+status.BackgroundTransparency = 0.65
 
-    return scroll
+local statusText = makeText(status, "9:41     ●  ●  ▰",
+    UDim2.new(1, -30, 1, 0),
+    UDim2.new(0, 15, 0, 0), 13, COLORS.text)
+
+statusText.TextXAlignment = Enum.TextXAlignment.Left
+
+-- 내비게이션
+local nav = makeFrame(system, "Navigation",
+    UDim2.new(1, 0, 0, 35),
+    UDim2.new(0, 0, 1, -35),
+    Color3.fromRGB(0, 0, 0), 0)
+
+nav.BackgroundTransparency = 0.65
+
+local gestureBar = makeButton(nav, "",
+    UDim2.new(0, 110, 0, 5),
+    UDim2.new(0.5, -55, 0.5, -2),
+    nil, Color3.fromRGB(245, 245, 245))
+corner(gestureBar, 10)
+
+local function goBack()
+    if state.page == "Home" then
+        return
+    elseif state.page == "Settings" then
+        showHome()
+    else
+        showSettings()
+    end
 end
 
-local function settingRow(parent,title,callback)
-    local b = button(
-        parent,
-        "   "..title.."   ›",
-        UDim2.new(1,0,0,65),
-        UDim2.new(),
-        callback
-    )
-
-    b.TextXAlignment = Enum.TextXAlignment.Left
-    return b
-end
-
---========================================================
--- FORWARD DECLARATIONS
---========================================================
-
-local showHome
-local showLock
-local showSettings
-local showDrawer
-local showNetwork
-local showBluetooth
-local showDisplay
-local showSound
-local showWallpaper
-local showBattery
-local showStorage
-local showDeviceInfo
-local showInfo
-local showNavigation
-local showRecent
-
-local toggleQuick
-
---========================================================
--- NAVIGATION BAR
---========================================================
-
-local function navigation()
-    local bar = make("Frame",{
-        Name = "NavigationBar",
-        Size = UDim2.new(1,0,0,45),
-        Position = UDim2.new(0,0,1,-45),
-        BackgroundTransparency = 1,
-        ZIndex = 10
-    },pages)
+renderNavigation = function()
+    clear(nav)
 
     if state.navigationMode == "Gesture" then
-
-        -- GESTURE BAR
-
-        local gestureBar = make("Frame",{
-            Size = UDim2.fromOffset(110,5),
-            Position = UDim2.new(0.5,-55,1,-15),
-            BackgroundColor3 = Color3.fromRGB(130,130,140),
-            BorderSizePixel = 0
-        },bar)
-
-        round(gestureBar,10)
-
+        local bar = makeButton(nav, "",
+            UDim2.new(0, 110, 0, 5),
+            UDim2.new(0.5, -55, 0.5, -2),
+            nil, Color3.fromRGB(245, 245, 245))
+        corner(bar, 10)
     else
+        makeButton(nav, "‹",
+            UDim2.new(0, 55, 0, 30),
+            UDim2.new(0.18, 0, 0, 2),
+            goBack, COLORS.panel2)
 
-        -- THREE BUTTON NAVIGATION
+        makeButton(nav, "●",
+            UDim2.new(0, 55, 0, 30),
+            UDim2.new(0.5, -27, 0, 2),
+            showHome, COLORS.panel2)
 
-        local back = button(
-            bar,
-            "‹",
-            UDim2.fromOffset(50,40),
-            UDim2.new(0.15,0,0,0),
-            function()
-                if state.page ~= "Home" then
-                    showHome()
-                end
-            end
-        )
-
-        local home = button(
-            bar,
-            "○",
-            UDim2.fromOffset(50,40),
-            UDim2.new(0.5,-25,0,0),
-            showHome
-        )
-
-        local recent = button(
-            bar,
-            "Ⅱ",
-            UDim2.fromOffset(50,40),
-            UDim2.new(0.75,-25,0,0),
-            showRecent
-        )
+        makeButton(nav, "▢",
+            UDim2.new(0, 55, 0, 30),
+            UDim2.new(0.82, -55, 0, 2),
+            showHome, COLORS.panel2)
     end
 end
 
---========================================================
--- HOME
---========================================================
+renderNavigation()
 
+-- 홈 화면
 showHome = function()
-    clearPage()
-    state.page = "Home"
+    local page = newPage("Home")
 
-    wallpaper.Visible = true
-    wallpaper.BackgroundColor3 = wallpapers[state.wallpaper]
-
-    local page = make("Frame",{
-        Size = UDim2.fromScale(1,1),
-        BackgroundTransparency = 1
-    },pages)
-
-    local clock = label(
-        page,
-        os.date("%H:%M"),
-        UDim2.new(1,0,0,100),
-        UDim2.new(0,0,0.16,0)
-    )
-
-    clock.TextSize = 72
-    clock.TextColor3 = Color3.new(1,1,1)
+    local clock = makeText(page, "9:41",
+        UDim2.new(1, 0, 0, 75),
+        UDim2.new(0, 0, 0.17, 0),
+        58, COLORS.text)
     clock.Font = Enum.Font.GothamLight
 
-    local date = label(
-        page,
-        os.date("%Y년 %m월 %d일"),
-        UDim2.new(1,0,0,40),
-        UDim2.new(0,0,0.27,0)
-    )
+    makeText(page, "MONDAY, NOVEMBER 9",
+        UDim2.new(1, 0, 0, 25),
+        UDim2.new(0, 0, 0.27, 0),
+        13, COLORS.subtext)
 
-    date.TextColor3 = Color3.new(1,1,1)
-
-    local apps = make("Frame",{
-        Size = UDim2.new(1,-30,0,110),
-        Position = UDim2.new(0,15,1,-145),
-        BackgroundTransparency = 1
-    },page)
-
-    make("UIGridLayout",{
-        CellSize = UDim2.fromOffset(75,100),
-        CellPadding = UDim2.fromOffset(15,0),
-        HorizontalAlignment = Enum.HorizontalAlignment.Center
-    },apps)
-
-    local appData = {
-        {"⚙","설정",showSettings},
-        {"▦","앱 목록",showDrawer},
-        {"◈","배경화면",showWallpaper}
-    }
-
-    for _,app in ipairs(appData) do
-        local holder = make("Frame",{
-            BackgroundTransparency = 1
-        },apps)
-
-        local icon = button(
-            holder,
-            app[1],
-            UDim2.fromOffset(65,65),
-            UDim2.fromOffset(5,0),
-            app[3]
-        )
-
-        icon.TextSize = 30
-
-        local title = label(
-            holder,
-            app[2],
-            UDim2.new(1,0,0,25),
-            UDim2.fromOffset(0,70)
-        )
-
-        title.TextSize = 12
-        title.TextColor3 = Color3.new(1,1,1)
-    end
-
-    navigation()
-end
-
---========================================================
--- APP DRAWER
---========================================================
-
-showDrawer = function()
-    local page = pageBase("앱")
-
-    local search = make("TextBox",{
-        Size = UDim2.new(1,-30,0,50),
-        Position = UDim2.fromOffset(15,110),
-        BackgroundColor3 = state.dark
-            and Color3.fromRGB(55,55,65)
-            or Color3.fromRGB(220,220,235),
-        PlaceholderText = "앱 검색",
-        Text = "",
-        TextColor3 = fg(),
-        TextSize = 16,
-        Font = Enum.Font.Gotham
-    },page)
-
-    round(search,25)
-
-    local scroll = make("ScrollingFrame",{
-        Size = UDim2.new(1,-30,1,-220),
-        Position = UDim2.fromOffset(15,175),
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        CanvasSize = UDim2.new()
-    },page)
-
-    local grid = make("UIGridLayout",{
-        CellSize = UDim2.fromOffset(90,100),
-        CellPadding = UDim2.fromOffset(10,10)
-    },scroll)
-
-    local appData = {
-        {"⚙","설정",showSettings},
-        {"◈","배경화면",showWallpaper},
-        {"ℹ","기기 정보",showDeviceInfo}
-    }
-
-    local function render(query)
-        for _,v in ipairs(scroll:GetChildren()) do
-            if v:IsA("GuiObject") and v ~= grid then
-                v:Destroy()
-            end
-        end
-
-        for _,app in ipairs(appData) do
-            if query == "" or string.find(app[2],query,1,true) then
-                local holder = make("Frame",{
-                    BackgroundTransparency = 1
-                },scroll)
-
-                local icon = button(
-                    holder,
-                    app[1],
-                    UDim2.fromOffset(65,65),
-                    UDim2.new(),
-                    app[3]
-                )
-
-                icon.TextSize = 28
-
-                local title = label(
-                    holder,
-                    app[2],
-                    UDim2.new(1,0,0,25),
-                    UDim2.fromOffset(0,68)
-                )
-
-                title.TextSize = 12
-            end
-        end
-    end
-
-    render("")
-
-    search:GetPropertyChangedSignal("Text"):Connect(function()
-        render(search.Text)
-    end)
-
-    navigation()
-end
-
---========================================================
--- RECENT APPS
---========================================================
-
-showRecent = function()
-    local page = pageBase("최근 앱")
+    local search = makeButton(page, "⌕     검색",
+        UDim2.new(0.86, 0, 0, 48),
+        UDim2.new(0.07, 0, 0.66, 0),
+        function()
+            showApp("검색")
+        end, COLORS.panel)
+    search.TextXAlignment = Enum.TextXAlignment.Left
+    search.TextSize = 17
 
     local apps = {
-        {"설정",showSettings},
-        {"앱 목록",showDrawer},
-        {"배경화면",showWallpaper}
+        {"⚙", "설정"},
+        {"▦", "앱"},
+        {"▣", "파일"},
+        {"◉", "카메라"},
     }
 
-    for i,app in ipairs(apps) do
-        local b = button(
-            page,
-            app[1].." 열기",
-            UDim2.new(1,-40,0,65),
-            UDim2.new(0,20,0,120+(i-1)*80),
-            app[2]
-        )
+    for i, app in ipairs(apps) do
+        local x = 0.08 + (i - 1) * 0.225
+        makeButton(page, app[1] .. "\n" .. app[2],
+            UDim2.new(0.19, 0, 0, 70),
+            UDim2.new(x, 0, 0.82, 0),
+            function()
+                if app[2] == "설정" then
+                    showSettings()
+                else
+                    showApp(app[2])
+                end
+            end, COLORS.panel)
     end
 
-    navigation()
+    makeText(page, "Android 16",
+        UDim2.new(1, 0, 0, 20),
+        UDim2.new(0, 0, 0.94, -20),
+        11, COLORS.subtext)
+
+    renderNavigation()
 end
 
---========================================================
--- SETTINGS
---========================================================
+-- 일반 앱 화면
+showApp = function(appName)
+    local page = newPage(appName)
 
+    makeText(page, appName,
+        UDim2.new(0.85, 0, 0, 50),
+        UDim2.new(0.075, 0, 0, 55),
+        25, COLORS.text).TextXAlignment = Enum.TextXAlignment.Left
+
+    makeText(page, appName .. " 앱\n\n이 앱은 가상 OS에서 실행 중입니다.",
+        UDim2.new(0.85, 0, 0, 130),
+        UDim2.new(0.075, 0, 0.25, 0),
+        17, COLORS.subtext)
+
+    makeButton(page, "홈으로",
+        UDim2.new(0.85, 0, 0, 48),
+        UDim2.new(0.075, 0, 0.75, 0),
+        showHome, COLORS.panel2)
+
+    renderNavigation()
+end
+
+-- 설정 화면
 showSettings = function()
-    local page = pageBase("설정")
-    local scroll = scrollList(page)
+    local page = newPage("Settings")
 
-    settingRow(scroll,"네트워크 및 인터넷",showNetwork)
-    settingRow(scroll,"연결된 기기",showBluetooth)
-    settingRow(scroll,"디스플레이",showDisplay)
-    settingRow(scroll,"소리 및 진동",showSound)
-    settingRow(scroll,"배경화면",showWallpaper)
-    settingRow(scroll,"시스템 내비게이션",showNavigation)
-    settingRow(scroll,"배터리",showBattery)
-    settingRow(scroll,"저장공간",showStorage)
-    settingRow(scroll,"기기 정보",showDeviceInfo)
+    makeText(page, "설정",
+        UDim2.new(0.85, 0, 0, 45),
+        UDim2.new(0.075, 0, 0, 45),
+        27, COLORS.text).TextXAlignment = Enum.TextXAlignment.Left
 
-    navigation()
-end
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Size = UDim2.new(0.9, 0, 0.78, 0)
+    scroll.Position = UDim2.new(0.05, 0, 0.14, 0)
+    scroll.BackgroundTransparency = 1
+    scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 3
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 680)
+    scroll.Parent = page
 
---========================================================
--- NETWORK
---========================================================
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 9)
+    layout.Parent = scroll
 
-showNetwork = function()
-    local page = pageBase("네트워크 및 인터넷")
-    local scroll = scrollList(page)
+    local function settingButton(title, description, callback)
+        local b = makeButton(scroll,
+            title .. "\n" .. description,
+            UDim2.new(1, 0, 0, 65),
+            UDim2.new(0, 0, 0, 0),
+            callback, COLORS.panel)
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.TextSize = 15
+        return b
+    end
 
-    settingRow(scroll,
-        "비행기 모드 : "..(state.airplane and "켜짐" or "꺼짐"),
+    settingButton("네트워크 및 인터넷", "Wi-Fi · 비행기 모드",
         function()
-            state.airplane = not state.airplane
-            state.wifi = not state.airplane
-            showNetwork()
-        end
-    )
+            local p = newPage("Network")
+            makeText(p, "네트워크 및 인터넷",
+                UDim2.new(0.9, 0, 0, 50),
+                UDim2.new(0.05, 0, 0, 50), 23)
 
-    settingRow(scroll,
-        "Wi-Fi : "..(state.wifi and "켜짐" or "꺼짐"),
-        function()
-            if not state.airplane then
-                state.wifi = not state.wifi
-            end
-            showNetwork()
-        end
-    )
+            makeButton(p, "Wi-Fi: " .. tostring(state.wifi),
+                UDim2.new(0.9, 0, 0, 55),
+                UDim2.new(0.05, 0, 0.2, 0),
+                function()
+                    state.wifi = not state.wifi
+                    showSettings()
+                end)
 
-    settingRow(scroll,"인터넷 정보",function()
-        showInfo("네트워크","Roblox 내부 가상 네트워크 설정입니다.")
-    end)
+            makeButton(p, "비행기 모드: " .. tostring(state.airplane),
+                UDim2.new(0.9, 0, 0, 55),
+                UDim2.new(0.05, 0, 0.3, 0),
+                function()
+                    state.airplane = not state.airplane
+                    showSettings()
+                end)
 
-    navigation()
-end
+            renderNavigation()
+        end)
 
---========================================================
--- BLUETOOTH
---========================================================
-
-showBluetooth = function()
-    local page = pageBase("연결된 기기")
-    local scroll = scrollList(page)
-
-    settingRow(scroll,
-        "블루투스 : "..(state.bluetooth and "켜짐" or "꺼짐"),
+    settingButton("연결된 기기", "블루투스",
         function()
             state.bluetooth = not state.bluetooth
-            showBluetooth()
-        end
-    )
+            showSettings()
+        end)
 
-    settingRow(scroll,"새 기기 연결",function()
-        showInfo("기기 연결","가상 블루투스 기기 검색 기능입니다.")
-    end)
-
-    navigation()
-end
-
---========================================================
--- DISPLAY
---========================================================
-
-showDisplay = function()
-    local page = pageBase("디스플레이")
-
-    button(
-        page,
-        "다크 모드 : "..(state.dark and "켜짐" or "꺼짐"),
-        UDim2.new(1,-30,0,60),
-        UDim2.fromOffset(15,120),
+    settingButton("디스플레이", "밝기 · 다크 모드",
         function()
-            state.dark = not state.dark
-            showDisplay()
-        end
-    )
+            local p = newPage("Display")
+            makeText(p, "디스플레이",
+                UDim2.new(0.9, 0, 0, 50),
+                UDim2.new(0.05, 0, 0, 50), 24)
 
-    local brightness = label(
-        page,
-        "밝기 "..math.floor(state.brightness*100).."%",
-        UDim2.new(1,-30,0,35),
-        UDim2.fromOffset(15,205)
-    )
+            makeText(p, "밝기",
+                UDim2.new(0.9, 0, 0, 30),
+                UDim2.new(0.05, 0, 0.2, 0), 16)
 
-    brightness.TextXAlignment = Enum.TextXAlignment.Left
+            local slider = Instance.new("TextButton")
+            slider.Size = UDim2.new(0.9, 0, 0, 50)
+            slider.Position = UDim2.new(0.05, 0, 0.27, 0)
+            slider.Text = "밝기 조절: " .. math.floor(state.brightness * 100) .. "%"
+            slider.TextColor3 = COLORS.text
+            slider.BackgroundColor3 = COLORS.panel
+            slider.Parent = p
+            corner(slider, 12)
 
-    local slider = make("Frame",{
-        Size = UDim2.new(1,-50,0,8),
-        Position = UDim2.fromOffset(25,260),
-        BackgroundColor3 = Color3.fromRGB(150,150,160)
-    },page)
+            slider.Activated:Connect(function()
+                state.brightness = state.brightness + 0.25
+                if state.brightness > 1 then
+                    state.brightness = 0.25
+                end
+                slider.Text = "밝기 조절: " .. math.floor(state.brightness * 100) .. "%"
+                wallpaper.BackgroundTransparency = 1 - state.brightness
+            end)
 
-    round(slider,10)
+            makeButton(p, "다크 모드: " .. tostring(state.dark),
+                UDim2.new(0.9, 0, 0, 50),
+                UDim2.new(0.05, 0, 0.42, 0),
+                function()
+                    state.dark = not state.dark
+                    showSettings()
+                end)
 
-    local fill = make("Frame",{
-        Size = UDim2.new(state.brightness,0,1,0),
-        BackgroundColor3 = Color3.fromRGB(150,130,240)
-    },slider)
+            renderNavigation()
+        end)
 
-    round(fill,10)
-
-    local drag = make("TextButton",{
-        Size = UDim2.new(1,0,0,40),
-        Position = UDim2.new(0,0,0,-16),
-        BackgroundTransparency = 1,
-        Text = ""
-    },slider)
-
-    local function setBrightness(value)
-        state.brightness = math.clamp(value,0,1)
-        fill.Size = UDim2.new(state.brightness,0,1,0)
-        brightness.Text = "밝기 "..math.floor(state.brightness*100).."%"
-        Lighting.Brightness = state.brightness*2
-    end
-
-    drag.Activated:Connect(function()
-        setBrightness(state.brightness >= 1 and 0.5 or 1)
-    end)
-
-    navigation()
-end
-
---========================================================
--- SOUND
---========================================================
-
-showSound = function()
-    local page = pageBase("소리 및 진동")
-    local scroll = scrollList(page)
-
-    settingRow(scroll,
-        "소리 : "..(state.sound and "켜짐" or "꺼짐"),
+    settingButton("소리 및 진동", "소리 설정",
         function()
             state.sound = not state.sound
-            showSound()
-        end
-    )
-
-    settingRow(scroll,"진동",function()
-        showInfo("진동","실제 기기의 진동 설정은 변경할 수 없습니다.")
-    end)
-
-    navigation()
-end
-
---========================================================
--- WALLPAPER
---========================================================
-
-showWallpaper = function()
-    local page = pageBase("배경화면")
-
-    for i,color in ipairs(wallpapers) do
-        local b = make("TextButton",{
-            Size = UDim2.new(0.42,0,0,110),
-            Position = UDim2.new(
-                i%2 == 0 and 0.53 or 0.05,
-                0,
-                math.floor((i-1)/2)*0.24+0.2,
-                0
-            ),
-            BackgroundColor3 = color,
-            Text = i == state.wallpaper and "선택됨" or "적용",
-            TextColor3 = Color3.new(1,1,1),
-            TextSize = 16
-        },page)
-
-        round(b,20)
-
-        b.Activated:Connect(function()
-            state.wallpaper = i
-            wallpaper.BackgroundColor3 = color
-            showWallpaper()
+            showSettings()
         end)
-    end
 
-    navigation()
-end
-
---========================================================
--- BATTERY
---========================================================
-
-showBattery = function()
-    local page = pageBase("배터리")
-
-    label(page,"배터리 상태",
-        UDim2.new(1,-30,0,50),
-        UDim2.fromOffset(15,130),
-        Enum.Font.GothamBold)
-
-    label(page,
-        "실제 기기 배터리 정보는 Roblox에서 접근할 수 없습니다.",
-        UDim2.new(1,-40,0,100),
-        UDim2.fromOffset(20,190)
-    )
-
-    navigation()
-end
-
---========================================================
--- STORAGE
---========================================================
-
-showStorage = function()
-    local page = pageBase("저장공간")
-
-    label(page,"가상 OS 저장공간",
-        UDim2.new(1,-30,0,50),
-        UDim2.fromOffset(15,130),
-        Enum.Font.GothamBold)
-
-    label(page,
-        "실제 휴대폰 저장공간이 아닌 Roblox 내부 화면입니다.",
-        UDim2.new(1,-40,0,100),
-        UDim2.fromOffset(20,190)
-    )
-
-    navigation()
-end
-
---========================================================
--- DEVICE INFO
---========================================================
-
-showDeviceInfo = function()
-    local page = pageBase("기기 정보")
-
-    label(page,"Android 16",
-        UDim2.new(1,-30,0,65),
-        UDim2.fromOffset(15,130),
-        Enum.Font.GothamBold)
-
-    label(page,
-        "Roblox Virtual Device\n\n모델 : Pixel Virtual\n버전 : Android 16\n시스템 : Roblox Luau",
-        UDim2.new(1,-40,0,180),
-        UDim2.fromOffset(20,200)
-    )
-
-    navigation()
-end
-
---========================================================
--- NAVIGATION SETTINGS
---========================================================
-
-showNavigation = function()
-    local page = pageBase("시스템 내비게이션")
-
-    local info = label(
-        page,
-        "원하는 내비게이션 방식을 선택하세요.",
-        UDim2.new(1,-40,0,50),
-        UDim2.fromOffset(20,115)
-    )
-
-    info.TextXAlignment = Enum.TextXAlignment.Left
-
-    local gesture = button(
-        page,
-        "제스처 내비게이션",
-        UDim2.new(1,-30,0,65),
-        UDim2.fromOffset(15,180),
+    settingButton("배터리", "배터리 사용량 및 상태",
         function()
-            state.navigationMode = "Gesture"
-            showNavigation()
-        end
-    )
+            showApp("배터리")
+        end)
 
-    local buttons = button(
-        page,
-        "3버튼 내비게이션",
-        UDim2.new(1,-30,0,65),
-        UDim2.fromOffset(15,260),
+    settingButton("저장공간", "내부 저장공간",
         function()
-            state.navigationMode = "Buttons"
-            showNavigation()
-        end
-    )
+            showApp("저장공간")
+        end)
 
-    if state.navigationMode == "Gesture" then
-        gesture.Text = "✓ 제스처 내비게이션"
-    else
-        buttons.Text = "✓ 3버튼 내비게이션"
-    end
+    settingButton("배경화면 및 스타일", "배경화면 설정",
+        function()
+            local p = newPage("Wallpaper")
+            makeText(p, "배경화면",
+                UDim2.new(0.9, 0, 0, 50),
+                UDim2.new(0.05, 0, 0, 50), 24)
 
-    navigation()
+            local choices = {
+                Color3.fromRGB(25, 35, 75),
+                Color3.fromRGB(65, 30, 90),
+                Color3.fromRGB(20, 80, 80),
+                Color3.fromRGB(90, 45, 40),
+            }
+
+            for i, color in ipairs(choices) do
+                makeButton(p, "배경화면 " .. i,
+                    UDim2.new(0.9, 0, 0, 55),
+                    UDim2.new(0.05, 0, 0.15 + (i - 1) * 0.14, 0),
+                    function()
+                        wallpaper.BackgroundColor3 = color
+                    end, color)
+            end
+
+            renderNavigation()
+        end)
+
+    settingButton("시스템", "언어 · 날짜 및 시간",
+        function()
+            showApp("시스템")
+        end)
+
+    settingButton("시스템 내비게이션", "제스처 또는 버튼 방식 변경",
+        function()
+            local p = newPage("NavigationSettings")
+            makeText(p, "시스템 내비게이션",
+                UDim2.new(0.9, 0, 0, 50),
+                UDim2.new(0.05, 0, 0, 50), 23)
+
+            makeButton(p, "제스처 내비게이션",
+                UDim2.new(0.9, 0, 0, 55),
+                UDim2.new(0.05, 0, 0.2, 0),
+                function()
+                    state.navigationMode = "Gesture"
+                    renderNavigation()
+                    showSettings()
+                end)
+
+            makeButton(p, "버튼 내비게이션",
+                UDim2.new(0.9, 0, 0, 55),
+                UDim2.new(0.05, 0, 0.31, 0),
+                function()
+                    state.navigationMode = "Buttons"
+                    renderNavigation()
+                    showSettings()
+                end)
+
+            renderNavigation()
+        end)
+
+    settingButton("휴대전화 정보", "Android 16 · 가상 기기",
+        function()
+            local p = newPage("About")
+            makeText(p, "기기 정보",
+                UDim2.new(0.9, 0, 0, 50),
+                UDim2.new(0.05, 0, 0, 50), 24)
+
+            makeText(p,
+                "기기 이름: Android Virtual Device\n모델: Virtual Android 16\nAndroid 버전: 16\n보안 업데이트: 2026-11-01",
+                UDim2.new(0.9, 0, 0, 160),
+                UDim2.new(0.05, 0, 0.2, 0), 16, COLORS.subtext)
+
+            renderNavigation()
+        end)
+
+    renderNavigation()
 end
 
---========================================================
--- INFO
---========================================================
+-- 빠른 설정창
+local quickPanel = makeFrame(system, "QuickPanel",
+    UDim2.new(1, 0, 0, 300),
+    UDim2.new(0, 0, 0, -310),
+    COLORS.background, 0)
 
-showInfo = function(title,message)
-    local page = pageBase(title)
+local quickTitle = makeText(quickPanel, "빠른 설정",
+    UDim2.new(0.9, 0, 0, 35),
+    UDim2.new(0.05, 0, 0, 15), 22)
+quickTitle.TextXAlignment = Enum.TextXAlignment.Left
 
-    label(page,message,
-        UDim2.new(1,-40,0,120),
-        UDim2.fromOffset(20,140)
-    )
-
-    navigation()
+local function quickButton(label, x, y, callback)
+    return makeButton(quickPanel, label,
+        UDim2.new(0.44, 0, 0, 58),
+        UDim2.new(x, 0, 0, y),
+        callback, COLORS.panel2)
 end
 
---========================================================
--- LOCK SCREEN
---========================================================
-
-showLock = function()
-    clearPage()
-    state.page = "Lock"
-
-    wallpaper.Visible = true
-    wallpaper.BackgroundColor3 = wallpapers[state.wallpaper]
-
-    local page = make("Frame",{
-        Size = UDim2.fromScale(1,1),
-        BackgroundTransparency = 1
-    },pages)
-
-    local clock = label(
-        page,
-        os.date("%H:%M"),
-        UDim2.new(1,0,0,110),
-        UDim2.new(0,0,0.24,0)
-    )
-
-    clock.TextSize = 76
-    clock.TextColor3 = Color3.new(1,1,1)
-    clock.Font = Enum.Font.GothamLight
-
-    local date = label(
-        page,
-        os.date("%Y년 %m월 %d일"),
-        UDim2.new(1,0,0,45),
-        UDim2.new(0,0,0.35,0)
-    )
-
-    date.TextColor3 = Color3.new(1,1,1)
-
-    button(
-        page,
-        "잠금 해제",
-        UDim2.new(0.8,0,0,60),
-        UDim2.new(0.1,0,0.82,0),
-        showHome
-    )
-end
-
---========================================================
--- QUICK SETTINGS
---========================================================
-
-local quick = make("Frame",{
-    Name = "QuickPanel",
-    Size = UDim2.new(1,0,0,290),
-    Position = UDim2.new(0,0,0,-310),
-    BackgroundColor3 = Color3.fromRGB(225,225,240),
-    BorderSizePixel = 0,
-    ZIndex = 60
-},system)
-
-round(quick,25)
-
-make("TextLabel",{
-    Size = UDim2.new(1,-30,0,45),
-    Position = UDim2.fromOffset(15,10),
-    BackgroundTransparency = 1,
-    Text = "빠른 설정",
-    TextColor3 = Color3.fromRGB(30,30,40),
-    TextSize = 24,
-    Font = Enum.Font.GothamBold,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 61
-},quick)
-
-local function qbutton(text,x,y,callback)
-    return button(
-        quick,
-        text,
-        UDim2.new(0.46,0,0,65),
-        UDim2.new(x,0,0,y),
-        callback
-    )
-end
-
-qbutton("Wi-Fi",0.03,65,function()
-    if not state.airplane then
-        state.wifi = not state.wifi
-    end
+quickButton("Wi-Fi", 0.04, 65, function()
+    state.wifi = not state.wifi
 end)
 
-qbutton("Bluetooth",0.51,65,function()
+quickButton("Bluetooth", 0.52, 65, function()
     state.bluetooth = not state.bluetooth
 end)
 
-qbutton("다크 모드",0.03,140,function()
-    state.dark = not state.dark
-    quick.BackgroundColor3 = bg()
-end)
-
-qbutton("비행기 모드",0.51,140,function()
+quickButton("비행기 모드", 0.04, 135, function()
     state.airplane = not state.airplane
-    state.wifi = not state.airplane
 end)
 
-qbutton("설정",0.03,215,function()
+quickButton("소리", 0.52, 135, function()
+    state.sound = not state.sound
+end)
+
+quickButton("설정", 0.04, 205, function()
     state.quick = false
-
-    tween(quick,{
-        Position = UDim2.new(0,0,0,-310)
-    })
-
+    TweenService:Create(quickPanel, TweenInfo.new(0.2),
+        {Position = UDim2.new(0, 0, 0, -310)}):Play()
     showSettings()
 end)
 
---========================================================
--- QUICK SETTINGS HANDLE
---========================================================
+quickButton("전원", 0.52, 205, function()
+    state.quick = false
+    TweenService:Create(quickPanel, TweenInfo.new(0.2),
+        {Position = UDim2.new(0, 0, 0, -310)}):Play()
+    showPowerMenu()
+end)
 
-local handle = make("TextButton",{
-    Name = "QuickHandle",
-    Size = UDim2.new(0,100,0,25),
-    Position = UDim2.new(0.5,-50,0,0),
-    BackgroundColor3 = Color3.new(1,1,1),
-    BackgroundTransparency = 0.4,
-    Text = "",
-    ZIndex = 70
-},system)
+showQuick = function()
+    if state.poweredOff or state.rebooting then
+        return
+    end
 
-round(handle,20)
-
-toggleQuick = function()
     state.quick = not state.quick
 
-    tween(quick,{
-        Position = state.quick
-            and UDim2.new(0,0,0,10)
-            or UDim2.new(0,0,0,-310)
-    })
+    local target = state.quick
+        and UDim2.new(0, 0, 0, 0)
+        or UDim2.new(0, 0, 0, -310)
+
+    TweenService:Create(quickPanel,
+        TweenInfo.new(0.22, Enum.EasingStyle.Quart),
+        {Position = target}):Play()
 end
 
-handle.Activated:Connect(toggleQuick)
+-- 전원 메뉴
+local powerOverlay
 
---========================================================
--- TOUCH GESTURES
---========================================================
+local function removePowerOverlay()
+    if powerOverlay then
+        powerOverlay:Destroy()
+        powerOverlay = nil
+    end
+end
 
+showPowerMenu = function()
+    removePowerOverlay()
+
+    powerOverlay = makeFrame(system, "PowerMenu",
+        UDim2.fromScale(1, 1),
+        UDim2.fromScale(0, 0),
+        Color3.fromRGB(0, 0, 0), 0)
+    powerOverlay.BackgroundTransparency = 0.25
+    powerOverlay.ZIndex = 50
+
+    local panel = makeFrame(powerOverlay, "Menu",
+        UDim2.new(0.82, 0, 0, 230),
+        UDim2.new(0.09, 0, 0.5, -115),
+        COLORS.panel, 22)
+    panel.ZIndex = 51
+
+    local title = makeText(panel, "전원 메뉴",
+        UDim2.new(0.9, 0, 0, 40),
+        UDim2.new(0.05, 0, 0, 12), 21)
+    title.ZIndex = 52
+
+    local off = makeButton(panel, "전원 끄기",
+        UDim2.new(0.9, 0, 0, 48),
+        UDim2.new(0.05, 0, 0, 65),
+        function()
+            removePowerOverlay()
+            powerOff()
+        end, Color3.fromRGB(130, 55, 55))
+    off.ZIndex = 52
+
+    local restart = makeButton(panel, "재시작",
+        UDim2.new(0.9, 0, 0, 48),
+        UDim2.new(0.05, 0, 0, 123),
+        function()
+            removePowerOverlay()
+            restartDevice()
+        end, COLORS.accent)
+    restart.ZIndex = 52
+
+    local cancel = makeButton(panel, "취소",
+        UDim2.new(0.9, 0, 0, 35),
+        UDim2.new(0.05, 0, 0, 181),
+        removePowerOverlay, COLORS.panel2)
+    cancel.ZIndex = 52
+end
+
+-- 전원 끄기 화면
+powerOff = function()
+    state.poweredOff = true
+    state.rebooting = false
+    state.quick = false
+
+    quickPanel.Position = UDim2.new(0, 0, 0, -310)
+    clear(pages)
+
+    local screen = makeFrame(system, "PowerOffScreen",
+        UDim2.fromScale(1, 1),
+        UDim2.fromScale(0, 0),
+        Color3.new(0, 0, 0), 0)
+    screen.ZIndex = 100
+
+    local label = makeText(screen, "전원이 꺼졌습니다",
+        UDim2.new(1, 0, 0, 50),
+        UDim2.new(0, 0, 0.43, 0),
+        19, Color3.fromRGB(190, 190, 190))
+    label.ZIndex = 101
+
+    local hint = makeText(screen, "화면을 터치하면 다시 켜집니다",
+        UDim2.new(1, 0, 0, 30),
+        UDim2.new(0, 0, 0.51, 0),
+        12, Color3.fromRGB(100, 100, 100))
+    hint.ZIndex = 101
+
+    local wake = Instance.new("TextButton")
+    wake.Size = UDim2.fromScale(1, 1)
+    wake.BackgroundTransparency = 1
+    wake.Text = ""
+    wake.ZIndex = 110
+    wake.Parent = screen
+
+    wake.Activated:Connect(function()
+        if not state.poweredOff then
+            return
+        end
+
+        state.poweredOff = false
+        screen:Destroy()
+        showLock()
+    end)
+end
+
+-- 부팅 화면
+restartDevice = function()
+    if state.rebooting then
+        return
+    end
+
+    state.rebooting = true
+    state.poweredOff = false
+    state.quick = false
+    quickPanel.Position = UDim2.new(0, 0, 0, -310)
+
+    clear(pages)
+
+    local boot = makeFrame(system, "BootScreen",
+        UDim2.fromScale(1, 1),
+        UDim2.fromScale(0, 0),
+        Color3.new(0, 0, 0), 0)
+    boot.ZIndex = 100
+
+    local logo = makeText(boot, "G",
+        UDim2.new(1, 0, 0, 100),
+        UDim2.new(0, 0, 0.32, 0),
+        78, Color3.fromRGB(230, 230, 230))
+    logo.Font = Enum.Font.GothamBold
+    logo.ZIndex = 101
+
+    local android = makeText(boot, "Android",
+        UDim2.new(1, 0, 0, 40),
+        UDim2.new(0, 0, 0.48, 0),
+        27, Color3.fromRGB(230, 230, 230))
+    android.ZIndex = 101
+
+    local powered = makeText(boot, "Powered by Android",
+        UDim2.new(1, 0, 0, 25),
+        UDim2.new(0, 0, 0.54, 0),
+        12, Color3.fromRGB(130, 130, 130))
+    powered.ZIndex = 101
+
+    local dots = makeText(boot, "●  ○  ○",
+        UDim2.new(1, 0, 0, 30),
+        UDim2.new(0, 0, 0.72, 0),
+        14, COLORS.blue)
+    dots.ZIndex = 101
+
+    task.spawn(function()
+        for i = 1, 8 do
+            if not boot.Parent then
+                return
+            end
+
+            dots.Text = (i % 3 == 1 and "●  ○  ○")
+                or (i % 3 == 2 and "○  ●  ○")
+                or "○  ○  ●"
+
+            task.wait(0.45)
+        end
+
+        if boot.Parent then
+            boot:Destroy()
+            state.rebooting = false
+            showLock()
+        end
+    end)
+end
+
+-- 잠금 화면
+showLock = function()
+    local page = newPage("LockScreen")
+
+    local lockClock = makeText(page, "9:41",
+        UDim2.new(1, 0, 0, 85),
+        UDim2.new(0, 0, 0.27, 0),
+        62, COLORS.text)
+    lockClock.Font = Enum.Font.GothamLight
+
+    makeText(page, "MONDAY, NOVEMBER 9",
+        UDim2.new(1, 0, 0, 25),
+        UDim2.new(0, 0, 0.37, 0),
+        13, COLORS.subtext)
+
+    makeButton(page, "위로 밀어서 잠금 해제",
+        UDim2.new(0.8, 0, 0, 50),
+        UDim2.new(0.1, 0, 0.78, 0),
+        showHome, COLORS.panel)
+
+    renderNavigation()
+end
+
+-- 터치 제스처
 local touchStart = nil
 local touchStartTime = 0
 
-UIS.InputBegan:Connect(function(input,processed)
+UIS.InputBegan:Connect(function(input, processed)
+    if processed then
+        return
+    end
 
     if input.UserInputType == Enum.UserInputType.Touch then
         touchStart = input.Position
-        touchStartTime = os.clock()
-    end
-
-    if processed then return end
-
-    if input.KeyCode == Enum.KeyCode.Escape then
-
-        if state.quick then
-            toggleQuick()
-
-        elseif state.page ~= "Home" then
-            showHome()
-
-        else
-            showDrawer()
-        end
+        touchStartTime = tick()
     end
 end)
 
-UIS.InputEnded:Connect(function(input)
-
-    if input.UserInputType ~= Enum.UserInputType.Touch
-        or not touchStart then
+UIS.InputEnded:Connect(function(input, processed)
+    if input.UserInputType ~= Enum.UserInputType.Touch then
         return
     end
 
-    local startPos = touchStart
-    local endPos = input.Position
-
-    local deltaY = endPos.Y - startPos.Y
-    local deltaX = math.abs(endPos.X-startPos.X)
-
-    local camera = workspace.CurrentCamera
-
-    if not camera then
-        touchStart = nil
+    if not touchStart then
         return
     end
 
-    local screenHeight = camera.ViewportSize.Y
-    local duration = os.clock()-touchStartTime
-
-    -- Ignore mostly horizontal gestures
-    if deltaX > math.abs(deltaY)*0.8 then
-        touchStart = nil
-        return
-    end
-
-    -- QUICK SETTINGS: TOP TO BOTTOM
-
-    if startPos.Y < 100 and deltaY > 70 then
-
-        if not state.quick then
-            state.quick = true
-
-            tween(quick,{
-                Position = UDim2.new(0,0,0,10)
-            })
-        end
-
-    -- CLOSE QUICK SETTINGS
-
-    elseif state.quick and deltaY < -70 then
-
-        state.quick = false
-
-        tween(quick,{
-            Position = UDim2.new(0,0,0,-310)
-        })
-
-    -- GESTURE NAVIGATION
-
-    elseif state.navigationMode == "Gesture"
-        and startPos.Y > screenHeight-100
-        and deltaY < -70
-        and state.page ~= "Lock" then
-
-        if duration > 0.8 then
-            showRecent()
-        else
-            showHome()
-        end
-    end
-
+    local finish = input.Position
+    local delta = finish - touchStart
+    local start = touchStart
     touchStart = nil
-end)
 
---========================================================
--- START
---========================================================
+    if state.poweredOff or state.rebooting then
+        return
+    end
 
-Lighting.Brightness = 2
+    -- 상단에서 아래로 스와이프: 빠른 설정
+    if start.Y < 55 and delta.Y > 65 then
+        showQuick()
+        return
+    end
 
-wallpaper.BackgroundColor3 = wallpapers[state.wallpaper]
+    -- 제스처 내비게이션
+    if state.navigationMode == "Gesture" and start.Y > 0 then
+        local viewport = camera and camera.ViewportSize or Vector2.new(400, 800)
 
-showLock()
-
--- CLOCK UPDATE
-
-task.spawn(function()
-    while gui.Parent do
-        task.wait(1)
-
-        for _,obj in ipairs(pages:GetDescendants()) do
-            if obj:IsA("TextLabel") then
-                if obj.Text:match("^%d%d:%d%d$") then
-                    obj.Text = os.date("%H:%M")
-                end
+        if start.Y > viewport.Y - 75 and delta.Y < -65 then
+            if state.page == "LockScreen" then
+                showHome()
+            elseif math.abs(delta.X) < 100 then
+                showHome()
             end
         end
     end
 end)
 
-print("Android 16 Virtual OS v5 Loaded")
+-- 초기 실행
+restartDevice()
+
+print("Android 16 Virtual OS loaded.")
