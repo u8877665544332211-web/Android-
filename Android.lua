@@ -1,76 +1,74 @@
 
 --[[
-    Android 16 Virtual OS
-    Roblox Studio - LocalScript
-    StarterPlayer > StarterPlayerScripts
+    NOVA BROWSER
+    Original Roblox Virtual Browser
+    Mobile + PC compatible
 
-    가상 OS 시뮬레이션입니다.
-    실제 기기의 전원, Wi-Fi, 블루투스 등을 제어하지 않습니다.
+    설치:
+    StarterPlayer > StarterPlayerScripts > LocalScript
+
+    참고:
+    Roblox GUI로 구현한 가상 브라우저입니다.
+    실제 웹사이트 HTML을 직접 렌더링하지는 않습니다.
 ]]
 
 local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- 기존 GUI 제거
-local old = playerGui:FindFirstChild("Android16")
-if old then
-    old:Destroy()
-end
+-- 기존 브라우저 제거
+local old = playerGui:FindFirstChild("NovaBrowser")
+if old then old:Destroy() end
 
--- 설정값
+-- 설정
+local C = {
+    bg = Color3.fromRGB(12, 14, 25),
+    panel = Color3.fromRGB(23, 26, 43),
+    panel2 = Color3.fromRGB(34, 38, 60),
+    accent = Color3.fromRGB(119, 105, 255),
+    accent2 = Color3.fromRGB(65, 165, 255),
+    text = Color3.fromRGB(245, 245, 255),
+    muted = Color3.fromRGB(150, 155, 180),
+    red = Color3.fromRGB(220, 75, 90),
+    green = Color3.fromRGB(75, 190, 140),
+}
+
 local state = {
-    page = "Home",
+    url = "nova://home",
+    history = {},
+    historyIndex = 0,
+    bookmarks = {},
+    tabs = {},
+    activeTab = 1,
     dark = true,
-    wifi = true,
-    bluetooth = false,
-    airplane = false,
-    sound = true,
-    brightness = 1,
-    navigationMode = "Gesture",
-    quick = false,
-    poweredOff = false,
-    rebooting = false,
+    loading = false,
 }
 
-local COLORS = {
-    background = Color3.fromRGB(15, 17, 24),
-    panel = Color3.fromRGB(30, 33, 43),
-    panel2 = Color3.fromRGB(43, 47, 59),
-    text = Color3.fromRGB(245, 246, 250),
-    subtext = Color3.fromRGB(165, 170, 185),
-    blue = Color3.fromRGB(150, 190, 255),
-    accent = Color3.fromRGB(90, 130, 220),
-}
-
--- GUI 생성
+-- GUI
 local gui = Instance.new("ScreenGui")
-gui.Name = "Android16"
-gui.IgnoreGuiInset = true
+gui.Name = "NovaBrowser"
 gui.ResetOnSpawn = false
-gui.DisplayOrder = 100
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.IgnoreGuiInset = true
+gui.DisplayOrder = 200
 gui.Parent = playerGui
 
 local root = Instance.new("Frame")
-root.Name = "Root"
 root.Size = UDim2.fromScale(1, 1)
-root.BackgroundColor3 = COLORS.background
+root.BackgroundColor3 = C.bg
 root.BorderSizePixel = 0
 root.Parent = gui
 
-local scale = Instance.new("UIScale")
-scale.Scale = 0.88
-scale.Parent = root
+local uiScale = Instance.new("UIScale")
+uiScale.Parent = root
 
 local camera = workspace.CurrentCamera
 local function updateScale()
     if camera then
-        local size = camera.ViewportSize
-        scale.Scale = math.clamp(math.min(size.X / 430, size.Y / 850), 0.65, 1)
+        local v = camera.ViewportSize
+        uiScale.Scale = math.clamp(math.min(v.X / 430, v.Y / 850), 0.68, 1)
     end
 end
 
@@ -79,60 +77,62 @@ if camera then
     camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
 end
 
--- 공통 UI 함수
+-- UI 유틸리티
 local function corner(obj, radius)
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 16)
+    c.CornerRadius = UDim.new(0, radius or 12)
     c.Parent = obj
-    return c
 end
 
-local function makeFrame(parent, name, size, position, color, radius)
+local function stroke(obj, color, thickness)
+    local s = Instance.new("UIStroke")
+    s.Color = color or C.accent
+    s.Thickness = thickness or 1
+    s.Transparency = 0.5
+    s.Parent = obj
+end
+
+local function frame(parent, size, pos, color, radius)
     local f = Instance.new("Frame")
-    f.Name = name
     f.Size = size
-    f.Position = position
-    f.BackgroundColor3 = color or COLORS.panel
+    f.Position = pos
+    f.BackgroundColor3 = color or C.panel
     f.BorderSizePixel = 0
     f.Parent = parent
-    if radius then
-        corner(f, radius)
-    end
+    if radius then corner(f, radius) end
     return f
 end
 
-local function makeText(parent, text, size, position, textSize, color)
+local function label(parent, text, size, pos, textSize, color)
     local t = Instance.new("TextLabel")
     t.BackgroundTransparency = 1
     t.Size = size
-    t.Position = position
-    t.Font = Enum.Font.Gotham
+    t.Position = pos
     t.Text = text
-    t.TextSize = textSize or 16
-    t.TextColor3 = color or COLORS.text
+    t.TextColor3 = color or C.text
+    t.TextSize = textSize or 15
+    t.Font = Enum.Font.Gotham
     t.TextWrapped = true
     t.Parent = parent
     return t
 end
 
-local function makeButton(parent, text, size, position, callback, color)
+local function button(parent, text, size, pos, callback, color)
     local b = Instance.new("TextButton")
     b.Size = size
-    b.Position = position
-    b.BackgroundColor3 = color or COLORS.panel2
+    b.Position = pos
+    b.BackgroundColor3 = color or C.panel2
     b.BorderSizePixel = 0
     b.Text = text
-    b.TextColor3 = COLORS.text
+    b.TextColor3 = C.text
     b.TextSize = 15
     b.Font = Enum.Font.GothamMedium
     b.AutoButtonColor = true
     b.Parent = parent
-    corner(b, 14)
+    corner(b, 12)
 
     b.Activated:Connect(function()
-        if callback then
-            callback()
-        end
+        if callback then callback() end
     end)
 
     return b
@@ -140,717 +140,539 @@ end
 
 local function clear(parent)
     for _, child in ipairs(parent:GetChildren()) do
-        if not child:IsA("UIListLayout")
-            and not child:IsA("UIGridLayout")
-            and not child:IsA("UIPadding") then
-            child:Destroy()
-        end
+        child:Destroy()
     end
 end
 
--- 배경화면
-local wallpaper = Instance.new("Frame")
-wallpaper.Name = "Wallpaper"
-wallpaper.Size = UDim2.fromScale(1, 1)
-wallpaper.BackgroundColor3 = Color3.fromRGB(25, 35, 75)
-wallpaper.BorderSizePixel = 0
-wallpaper.Parent = root
-
-local gradient = Instance.new("UIGradient")
-gradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(40, 65, 130)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(35, 45, 90)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 17, 38)),
+-- 메인 배경
+local bgGradient = Instance.new("UIGradient")
+bgGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 20, 40)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 12, 24)),
 })
-gradient.Rotation = 135
-gradient.Parent = wallpaper
+bgGradient.Rotation = 135
+bgGradient.Parent = root
+
+-- 상단 브랜드 영역
+local header = frame(root,
+    UDim2.new(1, 0, 0, 58),
+    UDim2.new(0, 0, 0, 0),
+    C.bg)
+
+header.BackgroundTransparency = 0.1
+
+local logo = label(header, "✦ NOVA",
+    UDim2.new(0.6, 0, 1, 0),
+    UDim2.new(0.05, 0, 0, 0),
+    22, C.text)
+logo.Font = Enum.Font.GothamBold
+logo.TextXAlignment = Enum.TextXAlignment.Left
+
+label(header, "BROWSER",
+    UDim2.new(0.3, 0, 0, 20),
+    UDim2.new(0.05, 0, 0.68, -10),
+    9, C.accent2).TextXAlignment = Enum.TextXAlignment.Left
+
+local tabButton = button(header, "▢ 1",
+    UDim2.new(0, 55, 0, 38),
+    UDim2.new(1, -115, 0.5, -19),
+    function()
+        showTabs()
+    end)
+
+local menuButton = button(header, "⋮",
+    UDim2.new(0, 42, 0, 38),
+    UDim2.new(1, -55, 0.5, -19),
+    function()
+        showMenu()
+    end)
+
+-- 주소창 영역
+local addressBar = frame(root,
+    UDim2.new(0.92, 0, 0, 48),
+    UDim2.new(0.04, 0, 0, 65),
+    C.panel, 15)
+
+stroke(addressBar, C.accent, 1)
+
+local lockIcon = label(addressBar, "⌕",
+    UDim2.new(0, 35, 1, 0),
+    UDim2.new(0, 5, 0, 0),
+    21, C.accent2)
+
+local address = Instance.new("TextBox")
+address.Size = UDim2.new(1, -90, 1, 0)
+address.Position = UDim2.new(0, 40, 0, 0)
+address.BackgroundTransparency = 1
+address.Text = "nova://home"
+address.PlaceholderText = "검색 또는 주소 입력"
+address.TextColor3 = C.text
+address.PlaceholderColor3 = C.muted
+address.TextSize = 14
+address.Font = Enum.Font.Gotham
+address.ClearTextOnFocus = false
+address.TextXAlignment = Enum.TextXAlignment.Left
+address.Parent = addressBar
+
+local goButton = button(addressBar, "↵",
+    UDim2.new(0, 38, 0, 36),
+    UDim2.new(1, -42, 0.5, -18),
+    nil, C.accent)
 
 -- 페이지 영역
-local pages = Instance.new("Frame")
-pages.Name = "Pages"
-pages.Size = UDim2.fromScale(1, 1)
-pages.BackgroundTransparency = 1
-pages.Parent = root
+local content = frame(root,
+    UDim2.new(0.92, 0, 1, -205),
+    UDim2.new(0.04, 0, 0, 125),
+    C.bg, 15)
 
--- 시스템 UI 영역
-local system = Instance.new("Frame")
-system.Name = "System"
-system.Size = UDim2.fromScale(1, 1)
-system.BackgroundTransparency = 1
-system.Parent = root
+content.BackgroundTransparency = 1
 
--- 전방 선언
-local showHome
-local showLock
-local showSettings
-local showApp
-local showQuick
-local showPowerMenu
-local powerOff
-local restartDevice
-local renderNavigation
+local pageFrame = Instance.new("ScrollingFrame")
+pageFrame.Size = UDim2.fromScale(1, 1)
+pageFrame.BackgroundTransparency = 1
+pageFrame.BorderSizePixel = 0
+pageFrame.ScrollBarThickness = 3
+pageFrame.CanvasSize = UDim2.new(0, 0, 0, 650)
+pageFrame.Parent = content
 
--- 현재 페이지 초기화
-local function newPage(name)
-    clear(pages)
-    state.page = name
+-- 하단 도구 모음
+local bottom = frame(root,
+    UDim2.new(0.92, 0, 0, 58),
+    UDim2.new(0.04, 0, 1, -72),
+    C.panel, 18)
 
-    local page = Instance.new("Frame")
-    page.Name = name
-    page.Size = UDim2.fromScale(1, 1)
-    page.BackgroundTransparency = 1
-    page.Parent = pages
+local backButton
+local forwardButton
+local homeButton
+local bookmarkButton
+local refreshButton
 
-    return page
-end
-
--- 상태 표시줄
-local status = makeFrame(system, "StatusBar",
-    UDim2.new(1, 0, 0, 32),
-    UDim2.new(0, 0, 0, 0),
-    Color3.fromRGB(0, 0, 0), 0)
-
-status.BackgroundTransparency = 0.65
-
-local statusText = makeText(status, "9:41     ●  ●  ▰",
-    UDim2.new(1, -30, 1, 0),
-    UDim2.new(0, 15, 0, 0), 13, COLORS.text)
-
-statusText.TextXAlignment = Enum.TextXAlignment.Left
-
--- 내비게이션
-local nav = makeFrame(system, "Navigation",
-    UDim2.new(1, 0, 0, 35),
-    UDim2.new(0, 0, 1, -35),
-    Color3.fromRGB(0, 0, 0), 0)
-
-nav.BackgroundTransparency = 0.65
-
-local gestureBar = makeButton(nav, "",
-    UDim2.new(0, 110, 0, 5),
-    UDim2.new(0.5, -55, 0.5, -2),
-    nil, Color3.fromRGB(245, 245, 245))
-corner(gestureBar, 10)
-
-local function goBack()
-    if state.page == "Home" then
-        return
-    elseif state.page == "Settings" then
-        showHome()
-    else
-        showSettings()
+-- 페이지 관리
+local function addHistory(url)
+    for i = #state.history, state.historyIndex + 1, -1 do
+        table.remove(state.history, i)
     end
+
+    table.insert(state.history, url)
+    state.historyIndex = #state.history
 end
 
-renderNavigation = function()
-    clear(nav)
-
-    if state.navigationMode == "Gesture" then
-        local bar = makeButton(nav, "",
-            UDim2.new(0, 110, 0, 5),
-            UDim2.new(0.5, -55, 0.5, -2),
-            nil, Color3.fromRGB(245, 245, 245))
-        corner(bar, 10)
-    else
-        makeButton(nav, "‹",
-            UDim2.new(0, 55, 0, 30),
-            UDim2.new(0.18, 0, 0, 2),
-            goBack, COLORS.panel2)
-
-        makeButton(nav, "●",
-            UDim2.new(0, 55, 0, 30),
-            UDim2.new(0.5, -27, 0, 2),
-            showHome, COLORS.panel2)
-
-        makeButton(nav, "▢",
-            UDim2.new(0, 55, 0, 30),
-            UDim2.new(0.82, -55, 0, 2),
-            showHome, COLORS.panel2)
-    end
+local function setURL(url)
+    state.url = url
+    address.Text = url
+    state.tabs[state.activeTab] = url
 end
 
-renderNavigation()
+local function makeCard(parent, title, description, callback)
+    local card = button(parent,
+        title .. "\n" .. description,
+        UDim2.new(1, -8, 0, 78),
+        UDim2.new(0, 4, 0, 0),
+        callback, C.panel)
 
--- 홈 화면
-showHome = function()
-    local page = newPage("Home")
+    card.TextXAlignment = Enum.TextXAlignment.Left
+    card.TextSize = 15
+    return card
+end
 
-    local clock = makeText(page, "9:41",
-        UDim2.new(1, 0, 0, 75),
-        UDim2.new(0, 0, 0.17, 0),
-        58, COLORS.text)
-    clock.Font = Enum.Font.GothamLight
+local function showHomePage()
+    clear(pageFrame)
+    setURL("nova://home")
 
-    makeText(page, "MONDAY, NOVEMBER 9",
+    label(pageFrame, "WELCOME TO",
         UDim2.new(1, 0, 0, 25),
-        UDim2.new(0, 0, 0.27, 0),
-        13, COLORS.subtext)
+        UDim2.new(0, 0, 0, 25),
+        12, C.muted)
 
-    local search = makeButton(page, "⌕     검색",
-        UDim2.new(0.86, 0, 0, 48),
-        UDim2.new(0.07, 0, 0.66, 0),
-        function()
-            showApp("검색")
-        end, COLORS.panel)
-    search.TextXAlignment = Enum.TextXAlignment.Left
-    search.TextSize = 17
+    local title = label(pageFrame, "NOVA.",
+        UDim2.new(1, 0, 0, 75),
+        UDim2.new(0, 0, 0, 45),
+        55, C.text)
+    title.Font = Enum.Font.GothamBold
 
-    local apps = {
-        {"⚙", "설정"},
-        {"▦", "앱"},
-        {"▣", "파일"},
-        {"◉", "카메라"},
+    label(pageFrame, "A different way to explore.",
+        UDim2.new(1, 0, 0, 30),
+        UDim2.new(0, 0, 0, 115),
+        14, C.muted)
+
+    local searchBox = Instance.new("TextBox")
+    searchBox.Size = UDim2.new(1, -8, 0, 52)
+    searchBox.Position = UDim2.new(0, 4, 0, 170)
+    searchBox.BackgroundColor3 = C.panel
+    searchBox.BorderSizePixel = 0
+    searchBox.PlaceholderText = "검색어를 입력하세요"
+    searchBox.PlaceholderColor3 = C.muted
+    searchBox.Text = ""
+    searchBox.TextColor3 = C.text
+    searchBox.TextSize = 15
+    searchBox.Font = Enum.Font.Gotham
+    searchBox.ClearTextOnFocus = false
+    searchBox.Parent = pageFrame
+    corner(searchBox, 15)
+
+    searchBox.FocusLost:Connect(function(enter)
+        if enter and searchBox.Text ~= "" then
+            navigate(searchBox.Text)
+        end
+    end)
+
+    label(pageFrame, "QUICK ACCESS",
+        UDim2.new(1, 0, 0, 25),
+        UDim2.new(0, 5, 0, 245),
+        12, C.accent2)
+
+    local quickSites = {
+        {"◈ Roblox", "nova://roblox"},
+        {"▣ History", "nova://history"},
+        {"★ Bookmarks", "nova://bookmarks"},
+        {"⚙ Settings", "nova://settings"},
     }
 
-    for i, app in ipairs(apps) do
-        local x = 0.08 + (i - 1) * 0.225
-        makeButton(page, app[1] .. "\n" .. app[2],
-            UDim2.new(0.19, 0, 0, 70),
-            UDim2.new(x, 0, 0.82, 0),
+    for i, item in ipairs(quickSites) do
+        local y = 280 + (i - 1) * 80
+        makeCard(pageFrame, item[1], item[2], function()
+            navigate(item[2])
+        end).Position = UDim2.new(0, 4, 0, y)
+    end
+
+    pageFrame.CanvasSize = UDim2.new(0, 0, 0, 620)
+end
+
+-- 검색 결과 페이지
+local function showSearch(query)
+    clear(pageFrame)
+    setURL("nova://search/" .. query)
+
+    label(pageFrame, "검색 결과",
+        UDim2.new(1, 0, 0, 45),
+        UDim2.new(0, 5, 0, 15),
+        23, C.text)
+
+    label(pageFrame, '"' .. query .. '" 검색",
+        UDim2.new(1, 0, 0, 35),
+        UDim2.new(0, 5, 0, 55),
+        14, C.muted)
+
+    makeCard(pageFrame, "NOVA 검색",
+        "이 브라우저는 자체 검색 UI를 사용합니다.",
+        function() end).Position = UDim2.new(0, 4, 0, 110)
+
+    makeCard(pageFrame, "검색 기능 안내",
+        "실제 검색 엔진 연결은 지원되지 않습니다.",
+        function() end).Position = UDim2.new(0, 4, 0, 200)
+
+    pageFrame.CanvasSize = UDim2.new(0, 0, 0, 350)
+end
+
+-- 북마크 페이지
+local function showBookmarks()
+    clear(pageFrame)
+    setURL("nova://bookmarks")
+
+    label(pageFrame, "북마크",
+        UDim2.new(1, 0, 0, 45),
+        UDim2.new(0, 5, 0, 15), 24)
+
+    for i, url in ipairs(state.bookmarks) do
+        local b = makeCard(pageFrame, "★ " .. url,
+            "저장된 페이지",
             function()
-                if app[2] == "설정" then
-                    showSettings()
-                else
-                    showApp(app[2])
-                end
-            end, COLORS.panel)
-    end
-
-    makeText(page, "Android 16",
-        UDim2.new(1, 0, 0, 20),
-        UDim2.new(0, 0, 0.94, -20),
-        11, COLORS.subtext)
-
-    renderNavigation()
-end
-
--- 일반 앱 화면
-showApp = function(appName)
-    local page = newPage(appName)
-
-    makeText(page, appName,
-        UDim2.new(0.85, 0, 0, 50),
-        UDim2.new(0.075, 0, 0, 55),
-        25, COLORS.text).TextXAlignment = Enum.TextXAlignment.Left
-
-    makeText(page, appName .. " 앱\n\n이 앱은 가상 OS에서 실행 중입니다.",
-        UDim2.new(0.85, 0, 0, 130),
-        UDim2.new(0.075, 0, 0.25, 0),
-        17, COLORS.subtext)
-
-    makeButton(page, "홈으로",
-        UDim2.new(0.85, 0, 0, 48),
-        UDim2.new(0.075, 0, 0.75, 0),
-        showHome, COLORS.panel2)
-
-    renderNavigation()
-end
-
--- 설정 화면
-showSettings = function()
-    local page = newPage("Settings")
-
-    makeText(page, "설정",
-        UDim2.new(0.85, 0, 0, 45),
-        UDim2.new(0.075, 0, 0, 45),
-        27, COLORS.text).TextXAlignment = Enum.TextXAlignment.Left
-
-    local scroll = Instance.new("ScrollingFrame")
-    scroll.Size = UDim2.new(0.9, 0, 0.78, 0)
-    scroll.Position = UDim2.new(0.05, 0, 0.14, 0)
-    scroll.BackgroundTransparency = 1
-    scroll.BorderSizePixel = 0
-    scroll.ScrollBarThickness = 3
-    scroll.CanvasSize = UDim2.new(0, 0, 0, 680)
-    scroll.Parent = page
-
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 9)
-    layout.Parent = scroll
-
-    local function settingButton(title, description, callback)
-        local b = makeButton(scroll,
-            title .. "\n" .. description,
-            UDim2.new(1, 0, 0, 65),
-            UDim2.new(0, 0, 0, 0),
-            callback, COLORS.panel)
-        b.TextXAlignment = Enum.TextXAlignment.Left
-        b.TextSize = 15
-        return b
-    end
-
-    settingButton("네트워크 및 인터넷", "Wi-Fi · 비행기 모드",
-        function()
-            local p = newPage("Network")
-            makeText(p, "네트워크 및 인터넷",
-                UDim2.new(0.9, 0, 0, 50),
-                UDim2.new(0.05, 0, 0, 50), 23)
-
-            makeButton(p, "Wi-Fi: " .. tostring(state.wifi),
-                UDim2.new(0.9, 0, 0, 55),
-                UDim2.new(0.05, 0, 0.2, 0),
-                function()
-                    state.wifi = not state.wifi
-                    showSettings()
-                end)
-
-            makeButton(p, "비행기 모드: " .. tostring(state.airplane),
-                UDim2.new(0.9, 0, 0, 55),
-                UDim2.new(0.05, 0, 0.3, 0),
-                function()
-                    state.airplane = not state.airplane
-                    showSettings()
-                end)
-
-            renderNavigation()
-        end)
-
-    settingButton("연결된 기기", "블루투스",
-        function()
-            state.bluetooth = not state.bluetooth
-            showSettings()
-        end)
-
-    settingButton("디스플레이", "밝기 · 다크 모드",
-        function()
-            local p = newPage("Display")
-            makeText(p, "디스플레이",
-                UDim2.new(0.9, 0, 0, 50),
-                UDim2.new(0.05, 0, 0, 50), 24)
-
-            makeText(p, "밝기",
-                UDim2.new(0.9, 0, 0, 30),
-                UDim2.new(0.05, 0, 0.2, 0), 16)
-
-            local slider = Instance.new("TextButton")
-            slider.Size = UDim2.new(0.9, 0, 0, 50)
-            slider.Position = UDim2.new(0.05, 0, 0.27, 0)
-            slider.Text = "밝기 조절: " .. math.floor(state.brightness * 100) .. "%"
-            slider.TextColor3 = COLORS.text
-            slider.BackgroundColor3 = COLORS.panel
-            slider.Parent = p
-            corner(slider, 12)
-
-            slider.Activated:Connect(function()
-                state.brightness = state.brightness + 0.25
-                if state.brightness > 1 then
-                    state.brightness = 0.25
-                end
-                slider.Text = "밝기 조절: " .. math.floor(state.brightness * 100) .. "%"
-                wallpaper.BackgroundTransparency = 1 - state.brightness
+                navigate(url)
             end)
+        b.Position = UDim2.new(0, 4, 0, 70 + (i - 1) * 85)
+    end
 
-            makeButton(p, "다크 모드: " .. tostring(state.dark),
-                UDim2.new(0.9, 0, 0, 50),
-                UDim2.new(0.05, 0, 0.42, 0),
-                function()
-                    state.dark = not state.dark
-                    showSettings()
-                end)
+    if #state.bookmarks == 0 then
+        label(pageFrame, "저장된 북마크가 없습니다.",
+            UDim2.new(1, 0, 0, 50),
+            UDim2.new(0, 0, 0, 100), 14, C.muted)
+    end
 
-            renderNavigation()
-        end)
+    pageFrame.CanvasSize = UDim2.new(0, 0, 0, 100 + #state.bookmarks * 85)
+end
 
-    settingButton("소리 및 진동", "소리 설정",
+-- 방문 기록
+local function showHistory()
+    clear(pageFrame)
+    setURL("nova://history")
+
+    label(pageFrame, "방문 기록",
+        UDim2.new(1, 0, 0, 45),
+        UDim2.new(0, 5, 0, 15), 24)
+
+    for i = #state.history, 1, -1 do
+        local url = state.history[i]
+        local b = makeCard(pageFrame, url,
+            "방문 기록",
+            function()
+                navigate(url)
+            end)
+        b.Position = UDim2.new(0, 4, 0, 70 + (#state.history - i) * 85)
+    end
+
+    if #state.history == 0 then
+        label(pageFrame, "방문 기록이 없습니다.",
+            UDim2.new(1, 0, 0, 50),
+            UDim2.new(0, 0, 0, 100), 14, C.muted)
+    end
+
+    pageFrame.CanvasSize = UDim2.new(0, 0, 0, 100 + #state.history * 85)
+end
+
+-- 설정 페이지
+local function showSettings()
+    clear(pageFrame)
+    setURL("nova://settings")
+
+    label(pageFrame, "브라우저 설정",
+        UDim2.new(1, 0, 0, 45),
+        UDim2.new(0, 5, 0, 15), 24)
+
+    makeCard(pageFrame, "테마 변경",
+        state.dark and "현재: 다크 모드" or "현재: 라이트 모드",
         function()
-            state.sound = not state.sound
+            state.dark = not state.dark
+            root.BackgroundColor3 = state.dark and C.bg or Color3.fromRGB(235, 238, 248)
             showSettings()
-        end)
+        end).Position = UDim2.new(0, 4, 0, 80)
 
-    settingButton("배터리", "배터리 사용량 및 상태",
+    makeCard(pageFrame, "방문 기록 삭제",
+        "저장된 방문 기록을 모두 삭제합니다.",
         function()
-            showApp("배터리")
-        end)
+            state.history = {}
+            state.historyIndex = 0
+            showSettings()
+        end).Position = UDim2.new(0, 4, 0, 170)
 
-    settingButton("저장공간", "내부 저장공간",
+    makeCard(pageFrame, "북마크 초기화",
+        "저장된 북마크를 모두 삭제합니다.",
         function()
-            showApp("저장공간")
-        end)
+            state.bookmarks = {}
+            showSettings()
+        end).Position = UDim2.new(0, 4, 0, 260)
 
-    settingButton("배경화면 및 스타일", "배경화면 설정",
+    makeCard(pageFrame, "브라우저 정보",
+        "NOVA Browser · Version 1.0",
         function()
-            local p = newPage("Wallpaper")
-            makeText(p, "배경화면",
-                UDim2.new(0.9, 0, 0, 50),
-                UDim2.new(0.05, 0, 0, 50), 24)
+            navigate("nova://about")
+        end).Position = UDim2.new(0, 4, 0, 350)
 
-            local choices = {
-                Color3.fromRGB(25, 35, 75),
-                Color3.fromRGB(65, 30, 90),
-                Color3.fromRGB(20, 80, 80),
-                Color3.fromRGB(90, 45, 40),
-            }
-
-            for i, color in ipairs(choices) do
-                makeButton(p, "배경화면 " .. i,
-                    UDim2.new(0.9, 0, 0, 55),
-                    UDim2.new(0.05, 0, 0.15 + (i - 1) * 0.14, 0),
-                    function()
-                        wallpaper.BackgroundColor3 = color
-                    end, color)
-            end
-
-            renderNavigation()
-        end)
-
-    settingButton("시스템", "언어 · 날짜 및 시간",
-        function()
-            showApp("시스템")
-        end)
-
-    settingButton("시스템 내비게이션", "제스처 또는 버튼 방식 변경",
-        function()
-            local p = newPage("NavigationSettings")
-            makeText(p, "시스템 내비게이션",
-                UDim2.new(0.9, 0, 0, 50),
-                UDim2.new(0.05, 0, 0, 50), 23)
-
-            makeButton(p, "제스처 내비게이션",
-                UDim2.new(0.9, 0, 0, 55),
-                UDim2.new(0.05, 0, 0.2, 0),
-                function()
-                    state.navigationMode = "Gesture"
-                    renderNavigation()
-                    showSettings()
-                end)
-
-            makeButton(p, "버튼 내비게이션",
-                UDim2.new(0.9, 0, 0, 55),
-                UDim2.new(0.05, 0, 0.31, 0),
-                function()
-                    state.navigationMode = "Buttons"
-                    renderNavigation()
-                    showSettings()
-                end)
-
-            renderNavigation()
-        end)
-
-    settingButton("휴대전화 정보", "Android 16 · 가상 기기",
-        function()
-            local p = newPage("About")
-            makeText(p, "기기 정보",
-                UDim2.new(0.9, 0, 0, 50),
-                UDim2.new(0.05, 0, 0, 50), 24)
-
-            makeText(p,
-                "기기 이름: Android Virtual Device\n모델: Virtual Android 16\nAndroid 버전: 16\n보안 업데이트: 2026-11-01",
-                UDim2.new(0.9, 0, 0, 160),
-                UDim2.new(0.05, 0, 0.2, 0), 16, COLORS.subtext)
-
-            renderNavigation()
-        end)
-
-    renderNavigation()
+    pageFrame.CanvasSize = UDim2.new(0, 0, 0, 470)
 end
 
--- 빠른 설정창
-local quickPanel = makeFrame(system, "QuickPanel",
-    UDim2.new(1, 0, 0, 300),
-    UDim2.new(0, 0, 0, -310),
-    COLORS.background, 0)
+-- 정보 페이지
+local function showAbout()
+    clear(pageFrame)
+    setURL("nova://about")
 
-local quickTitle = makeText(quickPanel, "빠른 설정",
-    UDim2.new(0.9, 0, 0, 35),
-    UDim2.new(0.05, 0, 0, 15), 22)
-quickTitle.TextXAlignment = Enum.TextXAlignment.Left
+    label(pageFrame, "NOVA Browser",
+        UDim2.new(1, 0, 0, 60),
+        UDim2.new(0, 0, 0, 70), 30)
 
-local function quickButton(label, x, y, callback)
-    return makeButton(quickPanel, label,
-        UDim2.new(0.44, 0, 0, 58),
-        UDim2.new(x, 0, 0, y),
-        callback, COLORS.panel2)
+    label(pageFrame,
+        "Version 1.0\n\nOriginal Roblox virtual browser.\n\nDesigned for touch and desktop controls.",
+        UDim2.new(0.9, 0, 0, 150),
+        UDim2.new(0.05, 0, 0, 140), 15, C.muted)
+
+    pageFrame.CanvasSize = UDim2.new(0, 0, 0, 350)
 end
 
-quickButton("Wi-Fi", 0.04, 65, function()
-    state.wifi = not state.wifi
-end)
+-- 페이지 이동
+navigate = function(input)
+    if not input or input == "" then return end
 
-quickButton("Bluetooth", 0.52, 65, function()
-    state.bluetooth = not state.bluetooth
-end)
+    input = string.gsub(input, "^%s*(.-)%s*$", "%1")
 
-quickButton("비행기 모드", 0.04, 135, function()
-    state.airplane = not state.airplane
-end)
-
-quickButton("소리", 0.52, 135, function()
-    state.sound = not state.sound
-end)
-
-quickButton("설정", 0.04, 205, function()
-    state.quick = false
-    TweenService:Create(quickPanel, TweenInfo.new(0.2),
-        {Position = UDim2.new(0, 0, 0, -310)}):Play()
-    showSettings()
-end)
-
-quickButton("전원", 0.52, 205, function()
-    state.quick = false
-    TweenService:Create(quickPanel, TweenInfo.new(0.2),
-        {Position = UDim2.new(0, 0, 0, -310)}):Play()
-    showPowerMenu()
-end)
-
-showQuick = function()
-    if state.poweredOff or state.rebooting then
-        return
-    end
-
-    state.quick = not state.quick
-
-    local target = state.quick
-        and UDim2.new(0, 0, 0, 0)
-        or UDim2.new(0, 0, 0, -310)
-
-    TweenService:Create(quickPanel,
-        TweenInfo.new(0.22, Enum.EasingStyle.Quart),
-        {Position = target}):Play()
-end
-
--- 전원 메뉴
-local powerOverlay
-
-local function removePowerOverlay()
-    if powerOverlay then
-        powerOverlay:Destroy()
-        powerOverlay = nil
-    end
-end
-
-showPowerMenu = function()
-    removePowerOverlay()
-
-    powerOverlay = makeFrame(system, "PowerMenu",
-        UDim2.fromScale(1, 1),
-        UDim2.fromScale(0, 0),
-        Color3.fromRGB(0, 0, 0), 0)
-    powerOverlay.BackgroundTransparency = 0.25
-    powerOverlay.ZIndex = 50
-
-    local panel = makeFrame(powerOverlay, "Menu",
-        UDim2.new(0.82, 0, 0, 230),
-        UDim2.new(0.09, 0, 0.5, -115),
-        COLORS.panel, 22)
-    panel.ZIndex = 51
-
-    local title = makeText(panel, "전원 메뉴",
-        UDim2.new(0.9, 0, 0, 40),
-        UDim2.new(0.05, 0, 0, 12), 21)
-    title.ZIndex = 52
-
-    local off = makeButton(panel, "전원 끄기",
-        UDim2.new(0.9, 0, 0, 48),
-        UDim2.new(0.05, 0, 0, 65),
-        function()
-            removePowerOverlay()
-            powerOff()
-        end, Color3.fromRGB(130, 55, 55))
-    off.ZIndex = 52
-
-    local restart = makeButton(panel, "재시작",
-        UDim2.new(0.9, 0, 0, 48),
-        UDim2.new(0.05, 0, 0, 123),
-        function()
-            removePowerOverlay()
-            restartDevice()
-        end, COLORS.accent)
-    restart.ZIndex = 52
-
-    local cancel = makeButton(panel, "취소",
-        UDim2.new(0.9, 0, 0, 35),
-        UDim2.new(0.05, 0, 0, 181),
-        removePowerOverlay, COLORS.panel2)
-    cancel.ZIndex = 52
-end
-
--- 전원 끄기 화면
-powerOff = function()
-    state.poweredOff = true
-    state.rebooting = false
-    state.quick = false
-
-    quickPanel.Position = UDim2.new(0, 0, 0, -310)
-    clear(pages)
-
-    local screen = makeFrame(system, "PowerOffScreen",
-        UDim2.fromScale(1, 1),
-        UDim2.fromScale(0, 0),
-        Color3.new(0, 0, 0), 0)
-    screen.ZIndex = 100
-
-    local label = makeText(screen, "전원이 꺼졌습니다",
-        UDim2.new(1, 0, 0, 50),
-        UDim2.new(0, 0, 0.43, 0),
-        19, Color3.fromRGB(190, 190, 190))
-    label.ZIndex = 101
-
-    local hint = makeText(screen, "화면을 터치하면 다시 켜집니다",
-        UDim2.new(1, 0, 0, 30),
-        UDim2.new(0, 0, 0.51, 0),
-        12, Color3.fromRGB(100, 100, 100))
-    hint.ZIndex = 101
-
-    local wake = Instance.new("TextButton")
-    wake.Size = UDim2.fromScale(1, 1)
-    wake.BackgroundTransparency = 1
-    wake.Text = ""
-    wake.ZIndex = 110
-    wake.Parent = screen
-
-    wake.Activated:Connect(function()
-        if not state.poweredOff then
+    if not string.find(input, "://", 1, true) then
+        if string.find(input, "%.") then
+            input = "https://" .. input
+        else
+            addHistory(input)
+            showSearch(input)
             return
         end
-
-        state.poweredOff = false
-        screen:Destroy()
-        showLock()
-    end)
-end
-
--- 부팅 화면
-restartDevice = function()
-    if state.rebooting then
-        return
     end
 
-    state.rebooting = true
-    state.poweredOff = false
-    state.quick = false
-    quickPanel.Position = UDim2.new(0, 0, 0, -310)
+    addHistory(input)
 
-    clear(pages)
+    if input == "nova://home" then
+        showHomePage()
+    elseif input == "nova://bookmarks" then
+        showBookmarks()
+    elseif input == "nova://history" then
+        showHistory()
+    elseif input == "nova://settings" then
+        showSettings()
+    elseif input == "nova://about" then
+        showAbout()
+    elseif input == "nova://roblox" then
+        clear(pageFrame)
+        setURL(input)
 
-    local boot = makeFrame(system, "BootScreen",
-        UDim2.fromScale(1, 1),
-        UDim2.fromScale(0, 0),
-        Color3.new(0, 0, 0), 0)
-    boot.ZIndex = 100
+        label(pageFrame, "ROBLOX",
+            UDim2.new(1, 0, 0, 60),
+            UDim2.new(0, 0, 0, 60), 35, C.text)
 
-    local logo = makeText(boot, "G",
-        UDim2.new(1, 0, 0, 100),
-        UDim2.new(0, 0, 0.32, 0),
-        78, Color3.fromRGB(230, 230, 230))
-    logo.Font = Enum.Font.GothamBold
-    logo.ZIndex = 101
+        label(pageFrame,
+            "Roblox 페이지 바로가기\n\n실제 웹페이지는 표시되지 않습니다.",
+            UDim2.new(1, 0, 0, 80),
+            UDim2.new(0, 0, 0, 130), 15, C.muted)
 
-    local android = makeText(boot, "Android",
-        UDim2.new(1, 0, 0, 40),
-        UDim2.new(0, 0, 0.48, 0),
-        27, Color3.fromRGB(230, 230, 230))
-    android.ZIndex = 101
+        makeCard(pageFrame, "Roblox 웹사이트",
+            "외부 브라우저에서 열기",
+            function()
+                local ok = pcall(function()
+                    game:GetService("GuiService"):OpenBrowserWindow("https://www.roblox.com")
+                end)
+                if not ok then
+                    warn("외부 브라우저 열기를 지원하지 않습니다.")
+                end
+            end).Position = UDim2.new(0, 4, 0, 240)
 
-    local powered = makeText(boot, "Powered by Android",
-        UDim2.new(1, 0, 0, 25),
-        UDim2.new(0, 0, 0.54, 0),
-        12, Color3.fromRGB(130, 130, 130))
-    powered.ZIndex = 101
+        pageFrame.CanvasSize = UDim2.new(0, 0, 0, 350)
+    else
+        clear(pageFrame)
+        setURL(input)
 
-    local dots = makeText(boot, "●  ○  ○",
-        UDim2.new(1, 0, 0, 30),
-        UDim2.new(0, 0, 0.72, 0),
-        14, COLORS.blue)
-    dots.ZIndex = 101
+        label(pageFrame, "페이지를 표시할 수 없습니다.",
+            UDim2.new(1, 0, 0, 50),
+            UDim2.new(0, 0, 0, 80), 19)
 
-    task.spawn(function()
-        for i = 1, 8 do
-            if not boot.Parent then
-                return
-            end
+        label(pageFrame,
+            "주소: " .. input ..
+            "\n\nNOVA는 실제 웹 HTML 렌더링을 지원하지 않습니다.",
+            UDim2.new(0.9, 0, 0, 100),
+            UDim2.new(0.05, 0, 0, 145), 13, C.muted)
 
-            dots.Text = (i % 3 == 1 and "●  ○  ○")
-                or (i % 3 == 2 and "○  ●  ○")
-                or "○  ○  ●"
-
-            task.wait(0.45)
-        end
-
-        if boot.Parent then
-            boot:Destroy()
-            state.rebooting = false
-            showLock()
-        end
-    end)
+        pageFrame.CanvasSize = UDim2.new(0, 0, 0, 350)
+    end
 end
 
--- 잠금 화면
-showLock = function()
-    local page = newPage("LockScreen")
+-- 탭 화면
+function showTabs()
+    clear(pageFrame)
+    setURL("nova://tabs")
 
-    local lockClock = makeText(page, "9:41",
-        UDim2.new(1, 0, 0, 85),
-        UDim2.new(0, 0, 0.27, 0),
-        62, COLORS.text)
-    lockClock.Font = Enum.Font.GothamLight
+    label(pageFrame, "열린 탭",
+        UDim2.new(1, 0, 0, 45),
+        UDim2.new(0, 5, 0, 15), 24)
 
-    makeText(page, "MONDAY, NOVEMBER 9",
-        UDim2.new(1, 0, 0, 25),
-        UDim2.new(0, 0, 0.37, 0),
-        13, COLORS.subtext)
+    for i, url in ipairs(state.tabs) do
+        local b = makeCard(pageFrame,
+            "탭 " .. i,
+            url,
+            function()
+                state.activeTab = i
+                navigate(url)
+                tabButton.Text = "▢ " .. #state.tabs
+            end)
 
-    makeButton(page, "위로 밀어서 잠금 해제",
-        UDim2.new(0.8, 0, 0, 50),
-        UDim2.new(0.1, 0, 0.78, 0),
-        showHome, COLORS.panel)
-
-    renderNavigation()
-end
-
--- 터치 제스처
-local touchStart = nil
-local touchStartTime = 0
-
-UIS.InputBegan:Connect(function(input, processed)
-    if processed then
-        return
+        b.Position = UDim2.new(0, 4, 0, 75 + (i - 1) * 85)
     end
 
-    if input.UserInputType == Enum.UserInputType.Touch then
-        touchStart = input.Position
-        touchStartTime = tick()
+    button(pageFrame, "+ 새 탭",
+        UDim2.new(1, -8, 0, 50),
+        UDim2.new(0, 4, 0, 75 + #state.tabs * 85),
+        function()
+            table.insert(state.tabs, "nova://home")
+            state.activeTab = #state.tabs
+            tabButton.Text = "▢ " .. #state.tabs
+            showHomePage()
+        end, C.accent)
+
+    pageFrame.CanvasSize = UDim2.new(0, 0, 0, 150 + #state.tabs * 85)
+end
+
+-- 메뉴
+function showMenu()
+    clear(pageFrame)
+    setURL("nova://menu")
+
+    label(pageFrame, "메뉴",
+        UDim2.new(1, 0, 0, 45),
+        UDim2.new(0, 5, 0, 15), 24)
+
+    local items = {
+        {"홈", "nova://home"},
+        {"북마크", "nova://bookmarks"},
+        {"방문 기록", "nova://history"},
+        {"설정", "nova://settings"},
+        {"브라우저 정보", "nova://about"},
+    }
+
+    for i, item in ipairs(items) do
+        local b = makeCard(pageFrame, item[1], item[2], function()
+            navigate(item[2])
+        end)
+        b.Position = UDim2.new(0, 4, 0, 75 + (i - 1) * 85)
+    end
+
+    pageFrame.CanvasSize = UDim2.new(0, 0, 0, 520)
+end
+
+-- 주소창 실행
+goButton.Activated:Connect(function()
+    navigate(address.Text)
+end)
+
+address.FocusLost:Connect(function(enter)
+    if enter then
+        navigate(address.Text)
     end
 end)
 
-UIS.InputEnded:Connect(function(input, processed)
-    if input.UserInputType ~= Enum.UserInputType.Touch then
-        return
-    end
-
-    if not touchStart then
-        return
-    end
-
-    local finish = input.Position
-    local delta = finish - touchStart
-    local start = touchStart
-    touchStart = nil
-
-    if state.poweredOff or state.rebooting then
-        return
-    end
-
-    -- 상단에서 아래로 스와이프: 빠른 설정
-    if start.Y < 55 and delta.Y > 65 then
-        showQuick()
-        return
-    end
-
-    -- 제스처 내비게이션
-    if state.navigationMode == "Gesture" and start.Y > 0 then
-        local viewport = camera and camera.ViewportSize or Vector2.new(400, 800)
-
-        if start.Y > viewport.Y - 75 and delta.Y < -65 then
-            if state.page == "LockScreen" then
-                showHome()
-            elseif math.abs(delta.X) < 100 then
-                showHome()
-            end
+-- 하단 버튼
+backButton = button(bottom, "‹",
+    UDim2.new(0.18, 0, 0.75, 0),
+    UDim2.new(0.02, 0, 0.12, 0),
+    function()
+        if state.historyIndex > 1 then
+            state.historyIndex -= 1
+            navigate(state.history[state.historyIndex])
         end
-    end
-end)
+    end)
 
--- 초기 실행
-restartDevice()
+forwardButton = button(bottom, "›",
+    UDim2.new(0.18, 0, 0.75, 0),
+    UDim2.new(0.21, 0, 0.12, 0),
+    function()
+        if state.historyIndex < #state.history then
+            state.historyIndex += 1
+            navigate(state.history[state.historyIndex])
+        end
+    end)
 
-print("Android 16 Virtual OS loaded.")
+homeButton = button(bottom, "⌂",
+    UDim2.new(0.18, 0, 0.75, 0),
+    UDim2.new(0.41, 0, 0.12, 0),
+    function()
+        navigate("nova://home")
+    end, C.accent)
+
+bookmarkButton = button(bottom, "☆",
+    UDim2.new(0.18, 0, 0.75, 0),
+    UDim2.new(0.61, 0, 0.12, 0),
+    function()
+        if not table.find(state.bookmarks, state.url) then
+            table.insert(state.bookmarks, state.url)
+            bookmarkButton.Text = "★"
+        else
+            bookmarkButton.Text = "☆"
+        end
+    end)
+
+refreshButton = button(bottom, "⟳",
+    UDim2.new(0.18, 0, 0.75, 0),
+    UDim2.new(0.81, 0, 0.12, 0),
+    function()
+        navigate(state.url)
+    end)
+
+-- 초기 탭
+table.insert(state.tabs, "nova://home")
+state.activeTab = 1
+
+-- 시작 화면
+showHomePage()
+
+print("NOVA Browser loaded successfully.")
